@@ -7,6 +7,7 @@ from django.db.models.query import QuerySet
 from rest_framework import exceptions
 
 from caluma.caluma_core.ordering import CalumaOrdering, OrderingFieldType
+from caluma.caluma_core.relay import extract_global_id
 from caluma.caluma_form.models import Answer, Question
 
 
@@ -31,7 +32,8 @@ class AnswerValueOrdering(CalumaOrdering):
     ) -> Tuple[QuerySet, OrderingFieldType]:
         # First, join the requested answer, then annotate the QS accordingly.
         # Last, return a field corresponding to the value
-        question = Question.objects.get(pk=value)
+        question_id = extract_global_id(value)
+        question = Question.objects.get(pk=question_id)
         QUESTION_TYPE_TO_FIELD = {
             Question.TYPE_INTEGER: "value",
             Question.TYPE_FLOAT: "value",
@@ -47,7 +49,7 @@ class AnswerValueOrdering(CalumaOrdering):
             value_field = QUESTION_TYPE_TO_FIELD[question.type]
         except KeyError:  # pragma: no cover
             raise exceptions.ValidationError(
-                f"Question '{question.slug}' has unsupported type {question.type} for ordering"
+                f"Question '{question_id}' has unsupported type {question.type} for ordering"
             )
 
         answers_subquery = Subquery(

@@ -39,14 +39,14 @@ def test_recalculate_calc_answers(
     )
     dep2_row = row_form_question.question
 
-    form_question_factory(
+    calc_question = form_question_factory(
         form=main_form,
         question__slug="calc_question",
         question__type=Question.TYPE_CALCULATED_FLOAT,
         question__calc_expression=(
             f'"dep1_main"|answer(0) + "{table_question.slug}"|answer([])|mapby("dep2_row")|sum'
         ),
-    )
+    ).question
 
     # assert calc_dependents
     dep1_main.refresh_from_db()
@@ -62,7 +62,7 @@ def test_recalculate_calc_answers(
     # make sure table questions' calc dependents are up to date
     table_question.refresh_from_db()
     save_answer(table_question, document=main_doc, value=[str(row_doc.pk)])
-    calc_answer = main_doc.answers.get(question_id="calc_question")
+    calc_answer = main_doc.answers.get(question=calc_question)
 
     # assert calc bug is fixed
     assert calc_answer.value == 23
@@ -102,7 +102,7 @@ def test_recalculate_sibling_rows_in_table(form_factory, form_question_factory, 
         form=row_form,
         question__slug="col2",
         question__type=Question.TYPE_CALCULATED_FLOAT,
-        question__calc_expression=f"'{column1}'|answer * 2",
+        question__calc_expression=f"'{column1.slug}'|answer * 2",
         sort=1,
     ).question
     row_form.refresh_from_db()

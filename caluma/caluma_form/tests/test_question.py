@@ -221,7 +221,9 @@ def test_copy_question(db, question, question_option_factory, schema_executor):
 
     question_slug = result.data["copyQuestion"]["question"]["slug"]
     assert question_slug == "new-question"
-    new_question = models.Question.objects.get(pk=question_slug)
+    new_question = models.Question.objects.get(
+        slug=question_slug, snapshot_id=question.snapshot_id
+    )
     assert new_question.label == "Test Question"
     assert new_question.meta == question.meta
     assert new_question.type == question.type
@@ -511,9 +513,11 @@ def test_save_multiple_choice_question(
 ):
     question_option_factory.create_batch(2, question=question)
 
-    option_ids = question.options.order_by("-slug").values_list("slug", flat=True)
+    options = question.options.order_by("-slug")
 
-    question.default_answer = answer_factory(value=list(option_ids), question=question)
+    question.default_answer = answer_factory(
+        value=list(options.values_list("slug", flat=True)), question=question
+    )
     question.hint_text = "test"
     question.save()
 
@@ -551,7 +555,7 @@ def test_save_multiple_choice_question(
             serializers.SaveMultipleChoiceQuestionSerializer, question
         )
     }
-    inp["input"]["options"] = option_ids
+    inp["input"]["options"] = list(options.values_list("pk", flat=True))
     result = schema_executor(query, variable_values=inp)
     assert not result.errors
     snapshot.assert_match(result.data)
@@ -976,7 +980,7 @@ def test_calculated_question(
         }
     """
 
-    inp = {"input": {"form": form.slug}}
+    inp = {"input": {"form": form.pk}}
     result = schema_executor(query, variable_values=inp)
     assert not result.errors
 
@@ -1000,7 +1004,7 @@ def test_calculated_question(
             "document": extract_global_id(
                 result.data["saveDocument"]["document"]["id"]
             ),
-            "question": question.slug,
+            "question": question.pk,
             "value": answer_value,
         }
     }
@@ -1113,7 +1117,7 @@ def test_recursive_calculated_question(
 
     schema_executor(query, variable_values=variables)
 
-    calc_ans = document.answers.get(question_id="calc-2")
+    calc_ans = document.answers.get(question=calc_2)
     assert calc_ans.value == 8
 
 
@@ -1136,7 +1140,7 @@ def test_calculated_question_update_calc_expr(
         question__calc_expression="'sub_question'|answer + 1",
     ).question
 
-    calc_ans = document.answers.get(question_id="calc_question")
+    calc_ans = document.answers.get(question__slug="calc_question")
     assert calc_ans.value == 101
 
     # spying on update_or_create_calc_answer doesn't seem to work, so we spy on
@@ -1216,7 +1220,7 @@ def test_calculated_question_answer_document(
 
     # adding another row will make make the expression valid
     row_doc = document_factory(form=row_form, family=document)
-    column_a2 = answer_factory(document=row_doc, question_id=column.slug, value=200)
+    column_a2 = answer_factory(document=row_doc, question=column, value=200)
 
     api.save_answer(
         question=table,
@@ -1224,7 +1228,7 @@ def test_calculated_question_answer_document(
         documents=list(table_a.documents.all()) + [row_doc],
     )
 
-    calc_ans = document.answers.get(question_id="calc_question")
+    calc_ans = document.answers.get(question__slug="calc_question")
     assert calc_ans.value == 300
 
     api.save_answer(
@@ -1298,5 +1302,5 @@ def test_init_of_calc_questions_queries(
         question__calc_expression="'table'|answer|mapby('column')|sum + 'top_question'|answer + 'sub_question'|answer",
     )
 
-    with django_assert_num_queries(25):
+    with django_assert_num_queries(24):
         api.save_answer(questions_dict["top_question"], document, value="1")

@@ -29,6 +29,8 @@ from functools import singledispatch, wraps
 from logging import getLogger
 from typing import Optional
 
+from django.db.models import Model
+
 from caluma.caluma_core import exceptions
 
 if typing.TYPE_CHECKING:  # pragma: no cover
@@ -68,7 +70,22 @@ def object_local_memoise(method):
         if not hasattr(self, "_memoise"):
             clear_memoise(self)
 
-        key = str([args, kwargs, method])
+        # Model reprs may traverse lazy relations. Cache by identity instead,
+        # including the model label so unrelated models cannot collide.
+        def identity(value):
+            return (
+                (value._meta.label_lower, value.pk)
+                if isinstance(value, Model)
+                else value
+            )
+
+        key = str(
+            [
+                [identity(arg) for arg in args],
+                {name: identity(value) for name, value in kwargs.items()},
+                method,
+            ]
+        )
         if key in self._memoise:
             object_local_memoise.hit_count += 1
             self._memoise_hit_count += 1
@@ -116,10 +133,12 @@ class FastLoader:
     """
 
     VALIDATION_CONTEXT_RELATIONS = (
-        "case__family__document",
+        # The reverse case.document relation points back to this document.
+        "form",
+        "case__family__document__form",
         "case__parent_work_item",
-        "work_item__case__document",
-        "work_item__case__family__document",
+        "work_item__case__document__form",
+        "work_item__case__family__document__form",
     )
     """
     Relations of a document that `DocumentValidator.get_validation_context()`
@@ -199,7 +218,7 @@ class FastLoader:
                 )
             )
             for dependency_slug in referenced_questions:
-                self._jexl_dependencies[dependency_slug][question.pk].append(
+                self._jexl_dependencies[dependency_slug][question.slug].append(
                     expr_property
                 )
 
@@ -254,7 +273,7 @@ class FastLoader:
         # wants to *use* the form objects themselves
         missing_forms = set(known_forms) - set(self._forms)
         if missing_forms:
-            for form in Form.objects.filter(slug__in=missing_forms):
+            for form in Form.objects.filter(pk__in=missing_forms):
                 self._forms[form.pk] = form
 
         if choice_questions:
@@ -326,13 +345,22 @@ class FastLoader:
             self._dynamic_options_by_question[do.question_id][do.slug] = do
 
     def question_for_answer(self, answer_id):
-        ans = self._answers[str(answer_id)]
-        return self._questions[ans.question_id]
+        """Return the cached question, or None for an answer outside the structure.
+
+        Accept answer instances too, including answers saved after preloading.
+        Only the question ID is needed; don't lazily load the relation.
+        """
+        answer = (
+            answer_id
+            if isinstance(answer_id, Answer)
+            else self._answers.get(str(answer_id))
+        )
+        return self._questions.get(answer.question_id) if answer is not None else None
 
     def answers_for_document(self, document_id: str) -> dict[str, Answer]:
         """Return an unordered dict of all answers in the given document.
 
-        The resulting dict is keyed by the question slug, pointing to the
+        The resulting dict is keyed by the question primary key, pointing to the
         answer object.
         """
         return self._answers_by_document[str(document_id)]
@@ -570,25 +598,35 @@ class BaseField(ABC):
         object might not yet exist.
         """
         document_id = document.pk if isinstance(document, Document) else document
-        question_id = question.pk if isinstance(question, Question) else question
+        question_slug = question.slug if isinstance(question, Question) else question
         # answer is not in "our" document, probably we're in a row doc.
         # Therefore, search "everywhere"
 
-        field_candidates = self.find_all_fields_by_slug(question_id)
+        field_candidates = self.find_all_fields_by_slug(question_slug)
         field = next(
-            (f for f in field_candidates if f.parent._document.pk == document_id), None
+            (
+                f
+                for f in field_candidates
+                if f.parent._document.pk == document_id
+                and (not isinstance(question, Question) or f.question.pk == question.pk)
+            ),
+            None,
         )
         return field
 
     @object_local_memoise
     def find_field_by_answer(self, answer) -> BaseField:
-        q_field = self.get_field(answer.question_id)
+        question = self._fastloader.question_for_answer(answer)
+        if question is None:
+            return None
+
+        q_field = self.get_field(question.slug)
         if q_field and q_field.answer and q_field.answer.pk == answer.pk:
             return q_field
 
         # answer is not in "our" document, probably we're in a row doc.
         # Therefore, search "everywhere"
-        for fld in self.get_root().find_all_fields_by_slug(answer.question_id):
+        for fld in self.get_root().find_all_fields_by_slug(question.slug):
             if fld.answer and fld.answer.pk == answer.pk:
                 return fld
         return None
@@ -729,7 +767,7 @@ class ValueField(BaseField):
         return self.parent.get_context()
 
     def get_options(self):
-        return self._fastloader.options_for_question(self.slug())
+        return self._fastloader.options_for_question(self.question.pk)
 
     def get_dynamic_options(self):
         """Return the dynamic options for this value.
@@ -740,7 +778,7 @@ class ValueField(BaseField):
         Return a dict of the form slug -> option-object:w
 
         """
-        return self._fastloader.dynamic_options_for_question(self.slug())
+        return self._fastloader.dynamic_options_for_question(self.question.pk)
 
     @object_local_memoise
     def is_empty(self):
@@ -898,7 +936,7 @@ class FieldSet(BaseField):
         # contexts, so a row context will be able to look "out". We implement
         # form questions the same way, even though not strictly neccessary
 
-        answers_by_q_slug = self._fastloader.answers_for_document(self._document.pk)
+        answers_by_question = self._fastloader.answers_for_document(self._document.pk)
 
         questions = self._fastloader.questions_for_form(self.form.pk)
 
@@ -915,7 +953,7 @@ class FieldSet(BaseField):
             elif question.type == Question.TYPE_TABLE:
                 self._context[question.slug] = RowSet(
                     question=question,
-                    answer=answers_by_q_slug.get(question.slug),
+                    answer=answers_by_question.get(question.pk),
                     parent=self,
                     _fastloader=self._fastloader,
                 )
@@ -923,7 +961,7 @@ class FieldSet(BaseField):
                 # "leaf" question
                 self._context[question.slug] = ValueField(
                     question=question,
-                    answer=answers_by_q_slug.get(question.slug),
+                    answer=answers_by_question.get(question.pk),
                     parent=self,
                     _fastloader=self._fastloader,
                 )

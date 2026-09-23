@@ -7,7 +7,6 @@ from django_filters.rest_framework import (
 
 from ..caluma_core.filters import (
     BaseFilterSet,
-    CharFilter,
     GlobalIDFilter,
     GlobalIDMultipleChoiceFilter,
     JSONValueFilter,
@@ -92,8 +91,8 @@ class FlowOrderSet(BaseFilterSet):
 class CaseFilterSet(MetaFilterSet):
     ids = GlobalIDMultipleChoiceFilter(field_name="pk")
 
-    document_form = CharFilter(field_name="document__form_id")
-    document_forms = MultipleChoiceFilter(field_name="document__form_id")
+    document_form = GlobalIDFilter(field_name="document__form")
+    document_forms = GlobalIDMultipleChoiceFilter(field_name="document__form")
     has_answer = HasAnswerFilter(document_id="document__pk")
     work_item_document_has_answer = HasAnswerFilter(
         document_id="work_items__document__pk"
@@ -170,7 +169,9 @@ class WorkItemFilterSet(MetaFilterSet):
 
     document_has_answer = HasAnswerFilter(document_id="document__pk")
     case_document_has_answer = HasAnswerFilter(document_id="case__document__pk")
-    case_document_forms = MultipleChoiceFilter(field_name="case__document__form_id")
+    case_document_forms = GlobalIDMultipleChoiceFilter(
+        field_name="case__document__form"
+    )
     case_meta_value = JSONValueFilter(field_name="case__meta")
     root_case_meta_value = JSONValueFilter(field_name="case__family__meta")
     case_search_answers = SearchAnswersFilter(document_id="case__document__pk")

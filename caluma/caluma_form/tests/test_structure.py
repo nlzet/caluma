@@ -193,11 +193,15 @@ def test_hidden_fieldset(simple_form_structure, hidden):
     assert fieldset.get_value() == expected_value
 
 
-def test_find_missing_answer(simple_form_structure, answer_factory):
+def test_find_missing_answer(
+    simple_form_structure, answer_factory, django_assert_num_queries
+):
     fieldset = structure.FieldSet(simple_form_structure)
+    answer = Answer.objects.get(pk=answer_factory().pk)
 
     # Find unrelated answer - should not be found
-    assert fieldset.find_field_by_answer(answer_factory()) is None
+    with django_assert_num_queries(0):
+        assert fieldset.find_field_by_answer(answer) is None
 
 
 def test_hidden_root_field(simple_form_structure):
@@ -276,7 +280,7 @@ def test_options(simple_form_structure, form_question_factory, question_option_f
     fieldset = structure.FieldSet(simple_form_structure)
     choice_field = fieldset.get_field(choice_q.slug)
 
-    expected_opts = [qopt.option_id for qopt in opts]
+    expected_opts = [qopt.option.slug for qopt in opts]
 
     option_slugs = [opt.slug for opt in choice_field.get_options()]
 
@@ -310,37 +314,45 @@ def test_fastloader_deferred_form_load(simple_form_structure, form_factory, capl
     """Verify behaviour of the fastloader's form_by_id() method.
 
     FastLoader.form_by_id() needs to load any missing form if given an
-    unknown form slug. This should not happen (things should be preloaded
+    unknown form ID. This should not happen (things should be preloaded
     properly), so we also check for an appropriate warning message.
     """
     form = form_factory()
 
     loader = structure.FastLoader.for_document(simple_form_structure)
-    expected_msg = f"Fastloader: Form {form.slug} was not preloaded - loading now"
+    expected_msg = f"Fastloader: Form {form.pk} was not preloaded - loading now"
 
     # Precondition, just to visualize the expected behaviour
-    assert form.slug not in loader._forms
+    assert form.pk not in loader._forms
 
     # that form is not part of the structure - fastloader can
     # still be triggered to load it and it's structure though
-    assert loader.form_by_id(form.slug) == form
+    assert loader.form_by_id(form.pk) == form
 
     assert expected_msg in caplog.messages
 
     # Postcondition
-    assert form.slug in loader._forms
+    assert form.pk in loader._forms
 
 
-def test_fastloader_question_for_answer(simple_form_structure):
+@pytest.mark.parametrize("question_slug", ["leaf1", "row_field_2"])
+def test_fastloader_question_for_answer(
+    simple_form_structure, question_slug, django_assert_num_queries
+):
     """Verify behaviour of the fastloader's question_for_answer() method."""
     fieldset = structure.FieldSet(simple_form_structure)
 
     loader = fieldset._fastloader
 
-    field = fieldset.get_field("leaf1")
+    field = next(iter(fieldset.find_all_fields_by_slug(question_slug)))
+    answer = Answer.objects.get(pk=field.answer.pk)
 
-    question = loader.question_for_answer(field.answer)
-    assert isinstance(question, Question)
+    with django_assert_num_queries(0):
+        question = loader.question_for_answer(answer)
+        assert isinstance(question, Question)
+        assert question == field.question
+        assert loader.question_for_answer(answer.pk) == question
+        assert fieldset.find_field_by_answer(answer) is field
 
     assert question.slug == field.slug()
 
@@ -351,7 +363,7 @@ def test_fastloader_multiple_documents(
     """Verify behaviour of the fastloader's form_by_id() method.
 
     FastLoader.form_by_id() needs to load any missing form if given an
-    unknown form slug. This should not happen (things should be preloaded
+    unknown form ID. This should not happen (things should be preloaded
     properly), so we also check for an appropriate warning message.
     """
 
@@ -411,14 +423,18 @@ def test_fastloader_no_duplicate_options(
     # structure.
     choice_q = question_factory(type=Question.TYPE_CHOICE)
     the_options = question_option_factory.create_batch(4, question=choice_q)
-    FormQuestion.objects.create(form_id="root", question=choice_q, sort=988)
-    FormQuestion.objects.create(form_id="measure-evening", question=choice_q, sort=987)
+    FormQuestion.objects.create(
+        form=simple_form_structure.form, question=choice_q, sort=988
+    )
+    FormQuestion.objects.create(
+        form=Question.objects.get(slug="subform", snapshot_id=1).sub_form,
+        question=choice_q,
+        sort=987,
+    )
 
     struc = structure.FieldSet(simple_form_structure)
 
-    assert len(the_options) == len(
-        struc._fastloader.options_for_question(choice_q.slug)
-    )
+    assert len(the_options) == len(struc._fastloader.options_for_question(choice_q.pk))
 
 
 def test_multistage_calculation_updates(
@@ -433,7 +449,7 @@ def test_multistage_calculation_updates(
     values at each step and don't end up in a cache trap
     """
     form_question_factory(
-        form_id="root",
+        form=simple_form_structure.form,
         question__type=Question.TYPE_CALCULATED_FLOAT,
         question__slug="outer-calc",
         question__calc_expression="'sub_table'|answer([])|mapby('row_calc')|sum",
@@ -441,10 +457,13 @@ def test_multistage_calculation_updates(
 
     struc0 = structure.FieldSet(simple_form_structure)
 
-    assert struc0._fastloader._questions["leaf2"].calc_dependents == ["row_calc"]
-    assert struc0._fastloader._questions["row_field_2"].calc_dependents == ["row_calc"]
-    assert struc0._fastloader._questions["row_calc"].calc_dependents == ["outer-calc"]
-    assert struc0._fastloader._questions["outer-calc"].calc_dependents == []
+    questions = {
+        question.slug: question for question in struc0._fastloader._questions.values()
+    }
+    assert questions["leaf2"].calc_dependents == ["row_calc"]
+    assert questions["row_field_2"].calc_dependents == ["row_calc"]
+    assert questions["row_calc"].calc_dependents == ["outer-calc"]
+    assert questions["outer-calc"].calc_dependents == []
 
     for field in struc0.find_all_fields_by_slug("row_field_2"):
         answer = save_answer(

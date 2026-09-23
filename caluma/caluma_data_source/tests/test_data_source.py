@@ -239,7 +239,7 @@ def test_data_sources_stores_user(
     info.context.user = FakeUser()
     variables = {
         "input": {
-            "question": question.slug,
+            "question": question.pk,
             "document": str(document.id),
             "value": "something",
         }
@@ -287,7 +287,7 @@ def test_data_source_context(
     variables = {}
 
     if has_question:
-        variables["question"] = question.slug
+        variables["question"] = question.pk
 
     if has_context:
         variables["context"] = json.dumps({"foo": "bar"})

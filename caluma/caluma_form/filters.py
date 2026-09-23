@@ -26,10 +26,11 @@ from ..caluma_core.ordering import AttributeOrderingFactory, MetaFieldOrdering
 from ..caluma_core.relay import extract_global_id
 from ..caluma_form.models import Answer, DynamicOption, Form, Question, QuestionOption
 from ..caluma_form.ordering import AnswerValueOrdering
+from ..caluma_snapshot.filters import SnapshotFilterSet
 from . import models, validators
 
 
-class FormFilterSet(MetaFilterSet):
+class FormFilterSet(SnapshotFilterSet):
     search = SearchFilter(fields=("slug", "name", "description"))
     slugs = MultipleChoiceFilter(field_name="slug")
     questions = MultipleChoiceFilter(field_name="questions__slug")
@@ -126,7 +127,7 @@ class VisibleOptionFilter(Filter):
         )
 
 
-class OptionFilterSet(MetaFilterSet):
+class OptionFilterSet(SnapshotFilterSet):
     search = SearchFilter(fields=("slug", "label"))
     visible_in_document = VisibleOptionFilter()
 
@@ -266,21 +267,21 @@ class HasAnswerFilter(Filter):
         lookup = expr.get("lookup", self.lookup_expr)
         lookup_expr = (hasattr(lookup, "value") and lookup.value) or lookup
 
-        question_slug = expr["question"]
+        question_id = extract_global_id(expr["question"])
         match_value = expr.get("value")
         if lookup == AnswerLookupMode.ISNULL:
             match_value = True
 
         hierarchy = expr.get("hierarchy", AnswerHierarchyMode.FAMILY)
 
-        question = models.Question.objects.get(slug=question_slug)
+        question = models.Question.objects.get(pk=question_id)
         self._validate_lookup(question, lookup)
 
         answer_value = "value"
         if question.type == models.Question.TYPE_DATE:
             answer_value = "date"
 
-        answers = models.Answer.objects.all()
+        answers = models.Answer.objects.filter(question=question)
 
         if lookup == AnswerLookupMode.INTERSECTS:
             inner_lookup = "exact"
@@ -290,17 +291,13 @@ class HasAnswerFilter(Filter):
             ):
                 inner_lookup = "contains"
 
-            exprs = [
-                Q(**{f"value__{inner_lookup}": val, "question__slug": question_slug})
-                for val in match_value
-            ]
+            exprs = [Q(**{f"value__{inner_lookup}": val}) for val in match_value]
             # connect all expressions with OR
             answers = answers.filter(reduce(lambda a, b: a | b, exprs))
         else:
             answers = answers.filter(
                 **{
                     f"{answer_value}__{lookup_expr}": match_value,
-                    "question__slug": question_slug,
                 }
             )
 
@@ -357,10 +354,10 @@ class SearchAnswersFilterType(InputObjectType):
     """
     Lookup type to search in answers.
 
-    You may pass in a list of question slugs and/or a list of form slugs to define
+    You may pass in a list of question IDs and/or a list of form IDs to define
     which answers to search. If you pass in one or more forms, answers to the
     questions in that form will be searched. If you pass in one or more question
-    slugs, the corresponding answers are searched. If you pass both, a superset
+    IDs, the corresponding answers are searched. If you pass both, a superset
     of both is searched (ie. they do not limit each other).
     """
 
@@ -425,6 +422,7 @@ class SearchAnswersFilter(Filter):
         raw_questions = value.get("questions")
         raw_forms = value.get("forms")
         questions = Question.objects.none()
+        form_ids = None
 
         if not raw_questions and not raw_forms:
             raise exceptions.ValidationError(
@@ -435,25 +433,25 @@ class SearchAnswersFilter(Filter):
             questions = self._validate_and_get_questions(raw_questions)
 
         if raw_forms:
-            forms = self._validate_and_get_forms(raw_forms)
-            form_questions = Form.get_all_questions(forms)
+            form_ids = self._validate_and_get_form_ids(raw_forms)
+            form_questions = Form.get_all_questions(form_ids)
             # Combine querysets: All questions of the given forms, as well as the
             # explicitly-requested questions.
             questions = questions | form_questions.filter(
                 type__in=self.FIELD_MAP.keys()
             )
 
-        return questions
+        return questions, form_ids
 
     def _apply_filter(self, qs, value):
-        questions = self._get_questions(value)
+        questions, form_ids = self._get_questions(value)
 
         for word in self.get_search_terms(value["value"]):
             answers_with_word = self._answers_with_word(
                 questions,
                 word,
                 value.get("lookup", SearchLookupMode.CONTAINS.value),
-                value.get("forms"),
+                form_ids,
             )
             qs = qs.filter(
                 **{
@@ -508,11 +506,11 @@ class SearchAnswersFilter(Filter):
             return Q(value=False) & Q(value=True)
 
         filt = "value__contains" if is_multiple else "value"
-        return reduce(
+        return Q(question=question) & reduce(
             lambda a, b: a | b, [Q(**{filt: slug}) for slug in matching_options]
         )
 
-    def _answers_with_word(self, questions, word, lookup, form_slugs):
+    def _answers_with_word(self, questions, word, lookup, form_ids):
         if not questions:
             return Answer.objects.none()
 
@@ -526,15 +524,15 @@ class SearchAnswersFilter(Filter):
 
         # add form filter if given,
         # otherwise it would return all answers of the question filter ignoring the form filter
-        if form_slugs not in EMPTY_VALUES:
-            answer_qs = answer_qs.filter(document__form__pk__in=form_slugs)
+        if form_ids:
+            answer_qs = answer_qs.filter(document__form_id__in=form_ids)
 
         return answer_qs
 
-    def _validate_and_get_questions(self, question_slugs):
+    def _validate_and_get_questions(self, question_ids):
         res = []
-        for q_slug in question_slugs:
-            question = Question.objects.get(pk=q_slug)
+        for question_id in question_ids:
+            question = Question.objects.get(pk=extract_global_id(question_id))
             if question.type not in self.FIELD_MAP:
                 raise exceptions.ValidationError(
                     f"Questions of type {question.type} cannot be used in searchAnswers"
@@ -543,17 +541,21 @@ class SearchAnswersFilter(Filter):
         return Question.objects.filter(pk__in=res)
 
     @staticmethod
-    def _validate_and_get_forms(form_slugs):
-        forms = Form.objects.filter(slug__in=form_slugs)
-        not_found = [
-            x for x in form_slugs if x not in forms.values_list("slug", flat=True)
-        ]
+    def _validate_and_get_form_ids(form_ids):
+        found_ids = []
+        not_found = []
+        for form_id in form_ids:
+            form = Form.objects.filter(pk=extract_global_id(form_id)).first()
+            if form is None:
+                not_found.append(form_id)
+            else:
+                found_ids.append(form.pk)
         if not_found:
             not_found_string = ", ".join(not_found)
             raise exceptions.ValidationError(
                 f"Following forms could not be found: {not_found_string}"
             )
-        return form_slugs
+        return found_ids
 
     @staticmethod
     @convert_form_field.register(SearchAnswersFilterField)
@@ -583,6 +585,7 @@ class DocumentFilterSet(MetaFilterSet):
         )
     )
     root_document = GlobalIDFilter(field_name="family")
+    form = GlobalIDFilter(field_name="form")
     forms = GlobalIDMultipleChoiceFilter(field_name="form")
 
     has_answer = HasAnswerFilter(document_id="pk")
@@ -618,7 +621,7 @@ class VisibleAnswerFilter(Filter):
         # assuming qs can only ever be in the context of a single document
         document = qs.first().document.family
         validator = validators.DocumentValidator()
-        return qs.filter(question__slug__in=validator.visible_questions(document))
+        return qs.filter(question__in=validator.visible_questions(document))
 
 
 class VisibleQuestionFilter(Filter):
@@ -633,11 +636,13 @@ class VisibleQuestionFilter(Filter):
         # assuming qs can only ever be in the context of a single document
         document = models.Document.objects.get(pk=document_id)
         validator = validators.DocumentValidator()
-        return qs.filter(slug__in=validator.visible_questions(document))
+        return qs.filter(pk__in=validator.visible_questions(document))
 
 
-class QuestionFilterSet(MetaFilterSet):
+class QuestionFilterSet(SnapshotFilterSet):
     exclude_forms = GlobalIDMultipleChoiceFilter(field_name="forms", exclude=True)
+    sub_form = GlobalIDFilter(field_name="sub_form")
+    row_form = GlobalIDFilter(field_name="row_form")
     search = SearchFilter(fields=("slug", "label"))
     slugs = MultipleChoiceFilter(field_name="slug")
 
@@ -657,6 +662,7 @@ class QuestionFilterSet(MetaFilterSet):
 
 class AnswerFilterSet(MetaFilterSet):
     search = SearchFilter(fields=("value", "file__name"))
+    question = GlobalIDFilter(field_name="question")
     questions = GlobalIDMultipleChoiceFilter(field_name="question")
 
     visible_in_context = VisibleAnswerFilter()

@@ -109,6 +109,9 @@ SIMPLE_HISTORY_HISTORY_ID_USE_UUID = True
 # Historical API
 ENABLE_HISTORICAL_API = env.bool("ENABLE_HISTORICAL_API", default=False)
 
+# Suffix migrated and newly created snapshot 1 IDs unless explicitly disabled.
+CALUMA_SNAPSHOT_V1_SUFFIX = env.bool("CALUMA_SNAPSHOT_V1_SUFFIX", default=True)
+
 # Configure the fields you intend to use in the "meta" fields. This will
 # provide corresponding constants in the ordreBy filter, as well as allow
 # you to use those fields in the analytics module.

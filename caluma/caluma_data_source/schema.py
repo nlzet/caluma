@@ -32,7 +32,7 @@ class Query(ObjectType):
         DataSourceDataConnection,
         name=String(required=True),
         question=String(
-            description="Slug of the question passed as context to the data source"
+            description="ID of the question passed as context to the data source"
         ),
         context=JSONString(
             description="JSON object passed as context to the data source"

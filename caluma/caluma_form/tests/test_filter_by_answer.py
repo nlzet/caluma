@@ -142,7 +142,15 @@ def test_query_all_questions(
     if search_lookup == "IN":
         search_value = [search_value]
 
-    variables = {"hasAnswer": [{"question": search_slug, "value": search_value}]}
+    question = sub_questions.get(search_slug)
+    variables = {
+        "hasAnswer": [
+            {
+                "question": question.pk if question else search_slug,
+                "value": search_value,
+            }
+        ]
+    }
     if search_lookup is not None:
         variables["hasAnswer"][0]["lookup"] = search_lookup
     if hierarchy_lookup is not None:
@@ -190,7 +198,7 @@ def test_has_answer_in(
         }
     """
     variables = {
-        "hasAnswer": [{"question": question.slug, "value": search, "lookup": "IN"}]
+        "hasAnswer": [{"question": question.pk, "value": search, "lookup": "IN"}]
     }
 
     result = schema_executor(query, variable_values=variables)
@@ -234,7 +242,7 @@ def test_has_answer_intersect(
     """
     variables = {
         "hasAnswer": [
-            {"question": question.slug, "value": search, "lookup": "INTERSECTS"}
+            {"question": question.pk, "value": search, "lookup": "INTERSECTS"}
         ]
     }
 

@@ -13,6 +13,7 @@ from caluma.caluma_form.calc_questions import (
     recalculate_all_calc_fields,
     recalculate_dependent_fields,
 )
+from caluma.caluma_snapshot.utils import rebind_definition
 from caluma.caluma_user.models import BaseUser
 from caluma.utils import update_model
 
@@ -373,8 +374,10 @@ class SaveDocumentLogic:
 
 class CopyFormLogic:
     @staticmethod
+    @transaction.atomic
     def copy(validated_data: dict, user: Optional[BaseUser] = None):
         source = validated_data["source"]
+        snapshot = validated_data.setdefault("snapshot_id", source.snapshot_id)
         validated_data["meta"] = dict(source.meta)
         form = BaseLogic.create(models.Form, validated_data, user=user)
 
@@ -384,7 +387,7 @@ class CopyFormLogic:
                 {
                     "form": form,
                     "sort": form_question.sort,
-                    "question": form_question.question,
+                    "question": rebind_definition(form_question.question, snapshot),
                 },
                 user,
             )

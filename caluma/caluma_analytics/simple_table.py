@@ -287,7 +287,7 @@ class AttributeField(BaseField):
     @cached_property
     def available_children(self):
         if self.is_date:
-            # for FormAnswerField, the identifier is the question slug,
+            # for FormAnswerField, the identifier is the question PK,
             # but the field is 'date'
             date_field = getattr(self, "attr_name", self.identifier)
 
@@ -414,8 +414,8 @@ class WorkItemField(BaseField):
         ).distinct()
 
         form_fields = {
-            f"document[{form.slug}]": FormDocumentField(
-                identifier=f"document[{form.slug}]",
+            f"document[{form.pk}]": FormDocumentField(
+                identifier=f"document[{form.pk}]",
                 parent=self,
                 visibility_source=self.visibility_source,
             )
@@ -517,8 +517,8 @@ class CaseField(BaseField):
         ).distinct()
 
         form_fields = {
-            f"document[{form.slug}]": FormDocumentField(
-                identifier=f"document[{form.slug}]",
+            f"document[{form.pk}]": FormDocumentField(
+                identifier=f"document[{form.pk}]",
                 parent=self,
                 visibility_source=self.visibility_source,
             )
@@ -544,15 +544,16 @@ class FormDocumentField(BaseField):
     """Field that provides access to a form's data."""
 
     def __init__(
-        self, parent, identifier, visibility_source, subform_level=0, form_slug=None
+        self, parent, identifier, visibility_source, subform_level=0, form_id=None
     ):
         super().__init__(
             parent=parent, identifier=identifier, visibility_source=visibility_source
         )
 
-        self.form_slug = form_slug if form_slug else self.path_args()[0]
-        if self.form_slug == "*":
-            self.form_slug = None
+        # Path arguments contain the stored form PK, including its snapshot suffix.
+        self.form_id = form_id if form_id else self.path_args()[0]
+        if self.form_id == "*":
+            self.form_id = None
 
         # subform level is used, so we can have the "path" as it is presented
         # to the user (our `location`) separate from where the corresponding
@@ -571,7 +572,7 @@ class FormDocumentField(BaseField):
                 self.identifier,
                 table=self.visibility_source.documents(),
                 outer_ref=("document_id", "id"),
-                filters=[f"form_id = '{self.form_slug}'"] if self.form_slug else [],
+                filters=[f"form_id = '{self.form_id}'"] if self.form_id else [],
                 parent=self.parent.query_field() if self.parent else None,
                 disable_distinct_on=True,
             )
@@ -589,8 +590,8 @@ class FormDocumentField(BaseField):
 
     @cached_property
     def available_children(self):
-        if self.form_slug:
-            form = form_models.Form.objects.get(pk=self.form_slug)
+        if self.form_id:
+            form = form_models.Form.objects.get(pk=self.form_id)
             questions = form.questions.all().exclude(
                 type=form_models.Question.TYPE_TABLE
             )
@@ -610,7 +611,7 @@ class FormDocumentField(BaseField):
         for question in questions:
             qf = self._question_field(question)
             if qf:
-                children[question.pk] = qf
+                children[qf.identifier] = qf
         return children
 
     def _question_field(self, question):
@@ -629,7 +630,8 @@ class FormDocumentField(BaseField):
         ):
             return FormAnswerField(
                 parent=self,
-                identifier=question.slug,
+                identifier=question.pk,
+                question=question,
                 attr_name="value",
                 subform_level=self.subform_level,
                 visibility_source=self.visibility_source,
@@ -637,7 +639,8 @@ class FormDocumentField(BaseField):
         elif question.type == question.TYPE_DATE:
             return FormAnswerField(
                 parent=self,
-                identifier=question.slug,
+                identifier=question.pk,
+                question=question,
                 attr_name="date",
                 is_date=True,
                 subform_level=self.subform_level,
@@ -647,8 +650,8 @@ class FormDocumentField(BaseField):
         elif question.type == question.TYPE_FORM:
             return FormDocumentField(
                 parent=self,
-                identifier=question.slug,
-                form_slug=question.sub_form_id,
+                identifier=question.pk,
+                form_id=question.sub_form_id,
                 subform_level=self.subform_level + 1,
                 visibility_source=self.visibility_source,
             )
@@ -672,11 +675,15 @@ class DirectDocumentField(FormDocumentField):
 class FormAnswerField(AttributeField):
     """Represents access to an answer within a form."""
 
-    def __init__(self, parent, identifier, attr_name, subform_level, **kwargs):
+    def __init__(
+        self, parent, identifier, attr_name, subform_level, question=None, **kwargs
+    ):
         super().__init__(parent=parent, identifier=identifier, **kwargs)
         self.subform_level = subform_level
         self.attr_name = attr_name
-        self._question = form_models.Question.objects.get(pk=self.identifier)
+        self._question = question or form_models.Question.objects.get(
+            pk=self.identifier
+        )
 
     def supported_functions(self):
         base_functions = [
@@ -714,7 +721,7 @@ class FormAnswerField(AttributeField):
             extract=self.identifier,
             table=self.visibility_source.answers(),
             # TODO: turn this into SQL parameter
-            filters=[f""""question_id" = '{self.identifier}' """],
+            filters=[f""""question_id" = '{self._question.pk}' """],
             outer_ref=("id", "document_id"),
             parent=self.parent.query_field() if self.parent else None,
         )
@@ -771,7 +778,7 @@ class FormInfoField(BaseField):
             extract=self.identifier,
             table=self.visibility_source.forms(),
             filters=[],
-            outer_ref=("form_id", "slug"),
+            outer_ref=("form_id", "id"),
             parent=self.parent.query_field() if self.parent else None,
         )
 
@@ -831,7 +838,11 @@ class ChoiceLabelField(AttributeField):
         label_join_field = sql.JoinField(
             identifier=self.identifier,
             extract=self.identifier,
-            table=self.visibility_source.options(),
+            table=sql.Query.from_queryset(
+                self.visibility_source.options(as_queryset=True).filter(
+                    questions=self.parent._question
+                )
+            ),
             filters=[],
             outer_ref=("value #>>'{}'", "slug"),  # noqa:P103
             parent=self.parent.query_field() if self.parent else None,
@@ -1106,8 +1117,8 @@ class CaseStartingObject(BaseStartingObject):
         ).distinct()
 
         form_fields = {
-            f"document[{form.slug}]": FormDocumentField(
-                identifier=f"document[{form.slug}]",
+            f"document[{form.pk}]": FormDocumentField(
+                identifier=f"document[{form.pk}]",
                 parent=None,
                 visibility_source=self.visibility_source,
             )
@@ -1185,8 +1196,8 @@ class WorkItemsStartingObject(BaseStartingObject):
         ).distinct()
 
         form_fields = {
-            f"document[{form.slug}]": FormDocumentField(
-                identifier=f"document[{form.slug}]",
+            f"document[{form.pk}]": FormDocumentField(
+                identifier=f"document[{form.pk}]",
                 parent=None,
                 visibility_source=self.visibility_source,
             )
@@ -1231,8 +1242,8 @@ class DocumentsStartingObject(BaseStartingObject):
         }
 
         form_fields = {
-            f"answers[{form.slug}]": DirectDocumentField(
-                identifier=f"answers[{form.slug}]",
+            f"answers[{form.pk}]": DirectDocumentField(
+                identifier=f"answers[{form.pk}]",
                 parent=None,
                 visibility_source=self.visibility_source,
             )

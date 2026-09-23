@@ -10,7 +10,7 @@ from caluma.caluma_form.jexl import QuestionJexl
 log = getLogger(__name__)
 
 
-def update_calc_dependents(slug, old_expr, new_expr):
+def update_calc_dependents(slug, old_expr, new_expr, snapshot_id):
     """Update the calc_dependents lists of our calc *dependencies*.
 
     The given (old and new) expressions are analyzed to see which
@@ -35,7 +35,9 @@ def update_calc_dependents(slug, old_expr, new_expr):
     to_add = new_q - old_q
     to_remove = old_q - new_q
 
-    questions = models.Question.objects.filter(pk__in=list(to_add | to_remove))
+    questions = models.Question.objects.for_snapshot(snapshot_id).filter(
+        slug__in=to_add | to_remove
+    )
 
     for question in questions:
         if question.slug in to_add:

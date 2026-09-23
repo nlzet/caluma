@@ -85,7 +85,7 @@ def test_save_case(
     inp = {
         "input": {
             "workflow": workflow.slug,
-            "form": form.slug,
+            "form": form.pk,
             "context": json.dumps({"additional_data": "foo"}),
         }
     }
@@ -344,14 +344,13 @@ def test_order_by_question_answer_value(
     form_factory,
     answer_factory,
 ):
-    value = "test_question1"
-
     if type == Question.TYPE_TEXT:
         d1 = document_factory()
         d2 = document_factory()
         d3 = document_factory()
 
         q1 = question_factory(type=Question.TYPE_TEXT, slug="test_question1")
+        question_id = q1.pk
         answer_factory(question=q1, value="c", document=d1)
         answer_factory(question=q1, value="a", document=d2)
         answer_factory(question=q1, value="b", document=d3)
@@ -366,10 +365,9 @@ def test_order_by_question_answer_value(
         case_factory(document=d3)
 
     elif type == Question.TYPE_FORM:
-        value = "test_sub_question1"
-
         f = form_factory(slug="test_sub_form")
         question = question_factory(type=Question.TYPE_TEXT, slug="test_sub_question1")
+        question_id = question.pk
         form_question_factory(form=f, question=question)
 
         d1 = document_factory(form=f)
@@ -405,6 +403,7 @@ def test_order_by_question_answer_value(
         d3 = document_factory()
 
         q1 = question_factory(type=Question.TYPE_DATE, slug="test_question1")
+        question_id = q1.pk
         answer_factory(question=q1, date="2019-05-31", document=d1)
         answer_factory(question=q1, date="2019-05-29", document=d2)
         answer_factory(question=q1, date="2019-05-27", document=d3)
@@ -424,6 +423,7 @@ def test_order_by_question_answer_value(
         d3 = document_factory()
 
         q1 = question_factory(type=Question.TYPE_FILES, slug="test_question1")
+        question_id = q1.pk
         answer_factory(question=q1, files=[file_factory(name="d")], document=d1)
         answer_factory(question=q1, files=[file_factory(name="b")], document=d2)
         answer_factory(question=q1, files=[file_factory(name="f")], document=d3)
@@ -439,7 +439,8 @@ def test_order_by_question_answer_value(
 
     elif type == Question.TYPE_TABLE:
         d1 = document_factory()
-        question_factory(type=Question.TYPE_TABLE, slug="test_question1")
+        question = question_factory(type=Question.TYPE_TABLE, slug="test_question1")
+        question_id = question.pk
         case_factory(document=d1)
 
     # It's necessary to order the answers by "CREATED_AT_ASC" in order to every time
@@ -476,7 +477,7 @@ def test_order_by_question_answer_value(
         }
     """
 
-    inp = {"question": value, "direction": "ASC" if asc else "DESC"}
+    inp = {"question": question_id, "direction": "ASC" if asc else "DESC"}
 
     result = schema_executor(query, variable_values=inp)
 
@@ -496,7 +497,7 @@ def test_document_form(
     case_factory(document=document_factory(form=form_b))
 
     query = """
-        query AllCases ($form: String!) {
+        query AllCases ($form: ID!) {
           allCases (filter: [{documentForm: $form}]){
             totalCount
             edges {
@@ -511,8 +512,8 @@ def test_document_form(
           }
         }
     """
-    # search for form A's slug
-    result = schema_executor(query, variable_values={"form": form_a.slug})
+    # search for form A's ID
+    result = schema_executor(query, variable_values={"form": form_a.pk})
 
     assert len(result.data["allCases"]["edges"]) == 1
 
@@ -520,7 +521,7 @@ def test_document_form(
 
     document = result.data["allCases"]["edges"][0]["node"]["document"]
 
-    assert extract_global_id(document["form"]["id"]) == form_a.slug
+    assert extract_global_id(document["form"]["id"]) == form_a.pk
 
 
 @pytest.mark.parametrize("question__slug,question__type", [("asdf", "text")])
@@ -561,7 +562,7 @@ def test_work_item_document(
     result = schema_executor(
         query,
         variable_values={
-            "filter": {"question": question.slug, "value": "hello", "lookup": "EXACT"}
+            "filter": {"question": question.pk, "value": "hello", "lookup": "EXACT"}
         },
     )
 

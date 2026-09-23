@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "simple_history",
     "caluma.caluma_core.apps.DefaultConfig",
     "caluma.caluma_user.apps.DefaultConfig",
+    "caluma.caluma_snapshot.apps.DefaultConfig",
     "caluma.caluma_form.apps.DefaultConfig",
     "caluma.caluma_analytics.apps.DefaultConfig",
     "caluma.caluma_workflow.apps.DefaultConfig",

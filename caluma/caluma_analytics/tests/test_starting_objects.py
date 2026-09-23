@@ -84,7 +84,7 @@ def test_extract_values(
     elif analytics_table.starting_object == "documents":
         # only analyze one form - for now
         form_id_field = analytics_table.fields.get(alias="output_slug")
-        form_id_field.filters = ["top_form"]
+        form_id_field.filters = [form.slug]
         form_id_field.save()
 
     table = analytics_table.get_analytics(info)

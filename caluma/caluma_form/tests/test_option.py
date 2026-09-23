@@ -47,7 +47,9 @@ def test_copy_option(db, option, schema_executor):
 
     option_slug = result.data["copyOption"]["option"]["slug"]
     assert option_slug == "new-option"
-    new_option = models.Option.objects.get(pk=option_slug)
+    new_option = models.Option.objects.get(
+        slug=option_slug, snapshot_id=option.snapshot_id
+    )
     assert new_option.label == "Test Option"
     assert new_option.meta == option.meta
     assert new_option.source == option
@@ -86,7 +88,7 @@ def option_jexl_setup(
             document=document,
             answer__document=document,
             answer__question=question_option.question,
-            answer__value=question_option_selected.option.pk,
+            answer__value=question_option_selected.option.slug,
         )
         form_question_factory(form=document.form, question=question_option.question)
         form_question_factory(form=document.form, question=text_question)
@@ -234,7 +236,7 @@ def test_option_is_hidden_save(
             "question": to_global_id(
                 "ChoiceQuestion", choice_question_option.question.pk
             ),
-            "value": choice_question_option.option.pk,
+            "value": choice_question_option.option.slug,
         }
     }
 

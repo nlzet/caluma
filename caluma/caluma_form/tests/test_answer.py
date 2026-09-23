@@ -417,7 +417,7 @@ def test_file_answer_mutation_create(db, answer, document, schema_executor, mini
         variable_values={
             "input": {
                 "document": str(document.pk),
-                "question": answer.question.slug,
+                "question": answer.question_id,
                 "value": [{"name": "some test file.txt"}],
             }
         },
@@ -441,7 +441,7 @@ def test_file_answer_mutation_add_file(
         variable_values={
             "input": {
                 "document": str(document.pk),
-                "question": answer.question.slug,
+                "question": answer.question_id,
                 "value": [
                     {"name": first_file.name, "id": str(first_file.pk)},
                     {"name": "another file.txt"},
@@ -472,7 +472,7 @@ def test_file_answer_mutation_remove_file(
         variable_values={
             "input": {
                 "document": str(document.pk),
-                "question": answer.question.slug,
+                "question": answer.question_id,
                 "value": [
                     {"name": "another file.txt"},
                 ],
@@ -501,7 +501,7 @@ def test_file_answer_mutation_update_missing_file(
         variable_values={
             "input": {
                 "document": str(document.pk),
-                "question": answer.question.slug,
+                "question": answer.question_id,
                 "value": [
                     {"name": "another file.txt", "id": orig_file_id},
                 ],

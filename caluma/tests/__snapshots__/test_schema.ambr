@@ -8,7 +8,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -19,9 +23,6 @@
     meta: GenericScalar!
     source: Question
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
     action: ButtonAction!
     color: ButtonColor!
     validateOnEnter: Boolean!
@@ -373,7 +374,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -386,9 +391,6 @@
     source: Question
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
     calcExpression: String
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   """An enumeration."""
@@ -523,8 +525,8 @@
     metaHasKey: String
     metaValue: [JSONValueFilterType]
     ids: [ID]
-    documentForm: String
-    documentForms: [String]
+    documentForm: ID
+    documentForms: [ID]
     hasAnswer: [HasAnswerFilterType]
     workItemDocumentHasAnswer: [HasAnswerFilterType]
     rootCase: ID
@@ -571,7 +573,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -586,9 +592,6 @@
     defaultAnswer: StringAnswer
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
     options(offset: Int, before: String, after: String, first: Int, last: Int, filter: [OptionFilterSetType], order: [OptionOrderSetType]): OptionConnection
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type CompleteTaskFormTask implements Task & Node {
@@ -665,6 +668,7 @@
   
   input CopyFormInput {
     slug: String!
+    snapshot: Int
     name: String!
     description: String
     source: ID!
@@ -679,6 +683,7 @@
   
   input CopyOptionInput {
     slug: String!
+    snapshot: Int
     label: String!
     source: ID!
     clientMutationId: String
@@ -691,6 +696,7 @@
   
   input CopyQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     source: ID!
     clientMutationId: String
@@ -804,7 +810,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -818,9 +828,6 @@
     formatValidators(before: String, after: String, first: Int, last: Int): FormatValidatorConnection
     defaultAnswer: DateAnswer
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   """
@@ -993,7 +1000,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1015,9 +1026,6 @@
       last: Int
     ): DataSourceDataConnection
     dataSource: String!
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type DynamicMultipleChoiceQuestion implements Question & DynamicQuestion & Node {
@@ -1027,7 +1035,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1049,9 +1061,6 @@
       last: Int
     ): DataSourceDataConnection
     dataSource: String!
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type DynamicOption implements Node {
@@ -1152,7 +1161,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1165,9 +1178,6 @@
     source: Question
     formatValidators(before: String, after: String, first: Int, last: Int): FormatValidatorConnection
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type FloatAnswer implements Answer & Node {
@@ -1192,7 +1202,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1207,9 +1221,6 @@
     formatValidators(before: String, after: String, first: Int, last: Int): FormatValidatorConnection
     defaultAnswer: FloatAnswer
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
     minValue: Float
     maxValue: Float
     step: Float
@@ -1286,7 +1297,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     name: String!
     description: String
     meta: GenericScalar
@@ -1297,9 +1312,6 @@
     """Reference this form has been copied from"""
     source: Form
     documents(offset: Int, before: String, after: String, first: Int, last: Int): DocumentConnection!
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type FormConnection {
@@ -1336,6 +1348,9 @@
     modifiedAfter: DateTime
     metaHasKey: String
     metaValue: [JSONValueFilterType]
+    snapshot: Int
+    id: ID
+    ids: [ID]
     search: String
     slugs: [String]
     invert: Boolean
@@ -1354,7 +1369,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1368,9 +1387,6 @@
   
     """Form referenced in a FormQuestion"""
     subForm: Form
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type FormatValidator {
@@ -1668,7 +1684,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1683,9 +1703,6 @@
     formatValidators(before: String, after: String, first: Int, last: Int): FormatValidatorConnection
     defaultAnswer: IntegerAnswer
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
     maxValue: Int
     minValue: Int
   }
@@ -1740,7 +1757,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -1756,9 +1777,6 @@
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
     options(offset: Int, before: String, after: String, first: Int, last: Int, filter: [OptionFilterSetType], order: [OptionOrderSetType]): OptionConnection
     staticContent: String
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type Mutation {
@@ -1844,7 +1862,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
     isHidden: QuestionJexl!
     isArchived: Boolean!
@@ -1852,9 +1874,6 @@
   
     """Reference this option has been copied from"""
     source: Option
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   type OptionConnection {
@@ -1889,6 +1908,9 @@
     modifiedAfter: DateTime
     metaHasKey: String
     metaValue: [JSONValueFilterType]
+    snapshot: Int
+    id: ID
+    ids: [ID]
     search: String
     visibleInDocument: ID
     invert: Boolean
@@ -1926,7 +1948,7 @@
     dataSource(
       name: String!
   
-      """Slug of the question passed as context to the data source"""
+      """ID of the question passed as context to the data source"""
       question: String
   
       """JSON object passed as context to the data source"""
@@ -1968,6 +1990,7 @@
     modifiedByUser: String
     modifiedByGroup: String
     slug: String!
+    snapshot: Int!
     label: String!
     infoText: String
   
@@ -2015,6 +2038,9 @@
     modifiedAfter: DateTime
     metaHasKey: String
     metaValue: [JSONValueFilterType]
+    snapshot: Int
+    id: ID
+    ids: [ID]
     excludeForms: [ID]
     search: String
     slugs: [String]
@@ -2217,6 +2243,7 @@
   input SaveActionButtonQuestionInput {
     label: String!
     slug: String!
+    snapshot: Int
     infoText: String
     isHidden: QuestionJexl
     meta: JSONString
@@ -2275,6 +2302,7 @@
   
   input SaveCalculatedFloatQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2310,6 +2338,7 @@
   
   input SaveChoiceQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2404,6 +2433,7 @@
   
   input SaveDateQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2622,6 +2652,7 @@
   
   input SaveDynamicChoiceQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2641,6 +2672,7 @@
   
   input SaveDynamicMultipleChoiceQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2665,6 +2697,7 @@
   
   input SaveFilesQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2683,6 +2716,7 @@
   
   input SaveFloatQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2705,6 +2739,7 @@
   
   input SaveFormInput {
     slug: String!
+    snapshot: Int
     name: String!
     description: String
     meta: JSONString
@@ -2720,6 +2755,7 @@
   
   input SaveFormQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2737,6 +2773,7 @@
   
   input SaveIntegerQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2758,6 +2795,7 @@
   
   input SaveMultipleChoiceQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2777,6 +2815,7 @@
   
   input SaveOptionInput {
     slug: String!
+    snapshot: Int
     label: String!
     isArchived: Boolean
     isHidden: QuestionJexl
@@ -2829,6 +2868,7 @@
   input SaveStaticQuestionInput {
     label: String!
     slug: String!
+    snapshot: Int
     infoText: String
     isHidden: QuestionJexl
     meta: JSONString
@@ -2844,6 +2884,7 @@
   
   input SaveTableQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2865,6 +2906,7 @@
   
   input SaveTextQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2886,6 +2928,7 @@
   
   input SaveTextareaQuestionInput {
     slug: String!
+    snapshot: Int
     label: String!
     infoText: String
     isRequired: QuestionJexl
@@ -2956,10 +2999,10 @@
   """
   Lookup type to search in answers.
   
-  You may pass in a list of question slugs and/or a list of form slugs to define
+  You may pass in a list of question IDs and/or a list of form IDs to define
   which answers to search. If you pass in one or more forms, answers to the
   questions in that form will be searched. If you pass in one or more question
-  slugs, the corresponding answers are searched. If you pass both, a superset
+  IDs, the corresponding answers are searched. If you pass both, a superset
   of both is searched (ie. they do not limit each other).
   """
   input SearchAnswersFilterType {
@@ -3172,7 +3215,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """
@@ -3187,9 +3234,6 @@
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
     staticContent: String
     dataSource: String
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   """An enumeration."""
@@ -3278,7 +3322,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -3295,9 +3343,6 @@
   
     """Form that represents rows of a TableQuestion"""
     rowForm: Form
-  
-    """The ID of the object"""
-    id: ID!
   }
   
   interface Task {
@@ -3371,7 +3416,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -3386,9 +3435,6 @@
     formatValidators(before: String, after: String, first: Int, last: Int): FormatValidatorConnection
     defaultAnswer: StringAnswer
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
     minLength: Int
     maxLength: Int
   }
@@ -3400,7 +3446,11 @@
     createdByGroup: String
     modifiedByUser: String
     modifiedByGroup: String
+  
+    """The ID of the object"""
+    id: ID!
     slug: String!
+    snapshot: Int!
     label: String!
   
     """Required expression is only evaluated when question is not hidden."""
@@ -3415,9 +3465,6 @@
     formatValidators(before: String, after: String, first: Int, last: Int): FormatValidatorConnection
     defaultAnswer: StringAnswer
     forms(offset: Int, before: String, after: String, first: Int, last: Int, filter: [FormFilterSetType], order: [FormOrderSetType]): FormConnection
-  
-    """The ID of the object"""
-    id: ID!
     minLength: Int
     maxLength: Int
   }
@@ -3545,7 +3592,7 @@
     assignedUsers: [String]
     documentHasAnswer: [HasAnswerFilterType]
     caseDocumentHasAnswer: [HasAnswerFilterType]
-    caseDocumentForms: [String]
+    caseDocumentForms: [ID]
     caseMetaValue: [JSONValueFilterType]
     rootCaseMetaValue: [JSONValueFilterType]
     caseSearchAnswers: [SearchAnswersFilterType]

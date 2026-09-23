@@ -47,9 +47,9 @@ def test_search(
         }
     """
 
-    def _search(q_slugs, f_slugs, word, expect_count):
+    def _search(question_ids, form_ids, word, expect_count):
         variables = {
-            "search": [{"questions": q_slugs, "forms": f_slugs, "value": word}]
+            "search": [{"questions": question_ids, "forms": form_ids, "value": word}]
         }
         result = schema_executor(query, variable_values=variables)
 
@@ -59,38 +59,38 @@ def test_search(
         return edges
 
     # search for "hello world". this should return doc a
-    edges = _search([question_a.slug], [], "hello world", 1)
+    edges = _search([question_a.pk], [], "hello world", 1)
     assert extract_global_id(edges[0]["node"]["id"]) == str(doc_a.id)
 
     # search for "planet" across both questions. this should return doc a, b and c
-    edges = _search([question_b.slug, question_a.slug], [], "planet", 3)
+    edges = _search([question_b.pk, question_a.pk], [], "planet", 3)
     assert set([str(doc_a.id), str(doc_b.id), str(doc_c.id)]) == set(
         extract_global_id(e["node"]["id"]) for e in edges
     )
 
     # search for "world" in form a, it should return doc a
-    edges = _search([], [form_a.slug], "world", 1)
+    edges = _search([], [form_a.pk], "world", 1)
     assert extract_global_id(edges[0]["node"]["id"]) == str(doc_a.id)
 
     # search for "world" in question b and form b. this should return doc b
-    edges = _search([question_a.slug], [form_b.slug], "world", 1)
+    edges = _search([question_a.pk], [form_b.pk], "world", 1)
     assert extract_global_id(edges[0]["node"]["id"]) == str(doc_b.id)
 
     # search for "world planet" in form b and c. this should return both doc b
     # and c
-    edges = _search([], [form_b.slug, form_c.slug], "world planet", 2)
+    edges = _search([], [form_b.pk, form_c.pk], "world planet", 2)
     assert set([str(doc_b.id), str(doc_c.id)]) == set(
         extract_global_id(e["node"]["id"]) for e in edges
     )
 
     # search for exact word combination "planet world" in form a, b and c. this should
     # return doc c
-    edges = _search([], [form_a.slug, form_b.slug, form_c.slug], '"planet world"', 1)
+    edges = _search([], [form_a.pk, form_b.pk, form_c.pk], '"planet world"', 1)
     assert extract_global_id(edges[0]["node"]["id"]) == str(doc_c.id)
 
     # search for exact word combination "planet world" (with missing quotation end) in
     # forms a, b and c. this should return doc c
-    edges = _search([], [form_a.slug, form_b.slug, form_c.slug], '"planet world', 1)
+    edges = _search([], [form_a.pk, form_b.pk, form_c.pk], '"planet world', 1)
     assert extract_global_id(edges[0]["node"]["id"]) == str(doc_c.id)
 
 
@@ -161,8 +161,8 @@ def test_search_choice(
         }
     """
 
-    def _search(slugs, word, expect_count):
-        variables = {"search": [{"questions": slugs, "value": word}]}
+    def _search(question_ids, word, expect_count):
+        variables = {"search": [{"questions": question_ids, "value": word}]}
         result = schema_executor(query, variable_values=variables)
 
         assert not result.errors
@@ -171,7 +171,7 @@ def test_search_choice(
         return edges
 
     edges = _search(
-        [question_a.slug], search_text, 0 if search_text == "unrelated" else 1
+        [question_a.pk], search_text, 0 if search_text == "unrelated" else 1
     )
     if search_text != "unrelated":
         assert extract_global_id(edges[0]["node"]["id"]) == str(doc_a.id)
@@ -220,9 +220,9 @@ def test_search_multiple(
         variable_values={
             "search": [
                 # "hello" is in doc_a and doc_b
-                {"questions": [question_a.slug], "value": "hello"},
+                {"questions": [question_a.pk], "value": "hello"},
                 # "world" is in doc_b and doc_c
-                {"questions": [question_b.slug], "value": "world"},
+                {"questions": [question_b.pk], "value": "world"},
             ]
         },
     )
@@ -250,7 +250,7 @@ def test_search_invalid_question_type(schema_executor, db, question_factory):
               }
             }
         """,
-        variable_values={"search": [{"questions": [question.slug], "value": "blah"}]},
+        variable_values={"search": [{"questions": [question.pk], "value": "blah"}]},
     )
 
     expected_error_msg = "Questions of type form cannot be used in searchAnswers"
@@ -317,7 +317,7 @@ def test_search_question_not_in_form(schema_executor, db, document):
         variable_values={
             "search": [
                 {
-                    "forms": [document.form.slug],
+                    "forms": [document.form_id],
                     "value": "blah",
                 }
             ]

@@ -25,6 +25,7 @@ from .caluma_core.faker import MultilangProvider
 from .caluma_core.models import HistoricalRecords
 from .caluma_form import factories as form_factories
 from .caluma_logging import factories as logging_factories
+from .caluma_snapshot.models import Snapshot
 from .caluma_user.models import AnonymousUser, OIDCUser
 from .caluma_workflow import factories as workflow_factories
 from .schema import schema
@@ -47,6 +48,23 @@ register_module(form_factories)
 register_module(logging_factories)
 register_module(workflow_factories)
 register_module(analytics_factories)
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_v1_suffix(request, settings):
+    settings.CALUMA_SNAPSHOT_V1_SUFFIX = (
+        request.node.get_closest_marker("snapshot_v1_suffix") is not None
+    )
+
+
+@pytest.fixture(autouse=True)
+def _initial_snapshot(request):
+    # Transactional tests flush data migrations, including the default snapshot.
+    if {"db", "transactional_db"}.intersection(
+        request.fixturenames
+    ) or request.node.get_closest_marker("django_db"):
+        request.getfixturevalue("db")
+        Snapshot.objects.get_or_create(pk=1)
 
 
 @pytest.fixture(scope="function", autouse=True)

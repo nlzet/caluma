@@ -10,12 +10,13 @@ from minio import S3Error
 from simple_history.models import HistoricalRecords
 
 from caluma.caluma_data_source.data_source_handlers import get_data_sources
+from caluma.caluma_snapshot import models as snapshot_models
 
 from ..caluma_core import models as core_models
 from .storage_clients import client
 
 
-class Form(core_models.SlugModel):
+class Form(snapshot_models.SnapshotModel):
     name = LocalizedField(blank=False, null=False, required=False)
     description = LocalizedField(blank=True, null=True, required=False)
     meta = models.JSONField(default=dict)
@@ -38,21 +39,21 @@ class Form(core_models.SlugModel):
         return cls.objects.raw(
             """
             WITH RECURSIVE
-                forms(slug) AS (
-                    SELECT slug
+                forms(id) AS (
+                    SELECT id
                     FROM caluma_form_form
-                    WHERE slug = ANY (%s)
+                    WHERE id = ANY (%s)
                     UNION ALL
                     SELECT
-                        all_subforms.subform_id AS slug
-                    FROM forms JOIN all_subforms ON (all_subforms.form_id = forms.slug )
+                        all_subforms.subform_id AS id
+                    FROM forms JOIN all_subforms ON (all_subforms.form_id = forms.id)
                 ),
                 all_subforms(form_id, subform_id) AS (
                     SELECT
                         caluma_form_formquestion.form_id,
                         COALESCE(caluma_form_question.row_form_id, caluma_form_question.sub_form_id) AS subform_id
                     FROM caluma_form_formquestion
-                    JOIN caluma_form_question ON (caluma_form_formquestion.question_id = caluma_form_question.slug)
+                    JOIN caluma_form_question ON (caluma_form_formquestion.question_id = caluma_form_question.id)
                     WHERE caluma_form_question.type IN ('form', 'table')
                 )
             SELECT * FROM forms;
@@ -68,24 +69,25 @@ class Form(core_models.SlugModel):
     def get_all_questions(cls, forms: list):
         return Question.objects.filter(forms__in=cls._get_all_raw_forms(forms))
 
-    class Meta:
+    class Meta(snapshot_models.SnapshotModel.Meta):
         indexes = [GinIndex(fields=["meta"])]
 
 
-class FormQuestion(core_models.NaturalKeyModel):
+class FormQuestion(snapshot_models.SnapshotNaturalKeyModel):
+    snapshot_relations = ("form", "question")
+
     form = models.ForeignKey("Form", on_delete=models.CASCADE)
     question = models.ForeignKey("Question", on_delete=models.CASCADE)
     sort = models.PositiveIntegerField(editable=False, db_index=True, default=0)
 
-    def natural_key(self):
-        return f"{self.form_id}.{self.question_id}"
-
-    class Meta:
+    class Meta(snapshot_models.SnapshotNaturalKeyModel.Meta):
         ordering = ["-sort"]
         unique_together = ("form", "question")
 
 
-class Question(core_models.SlugModel):
+class Question(snapshot_models.SnapshotModel):
+    snapshot_relations = ("row_form", "sub_form")
+
     TYPE_MULTIPLE_CHOICE = "multiple_choice"
     TYPE_INTEGER = "integer"
     TYPE_FLOAT = "float"
@@ -276,24 +278,23 @@ class Question(core_models.SlugModel):
         base = super().__repr__()
         return base[:-1] + f", type={self.type})"
 
-    class Meta:
+    class Meta(snapshot_models.SnapshotModel.Meta):
         indexes = [GinIndex(fields=["meta"])]
 
 
-class QuestionOption(core_models.NaturalKeyModel):
+class QuestionOption(snapshot_models.SnapshotNaturalKeyModel):
+    snapshot_relations = ("question", "option")
+
     question = models.ForeignKey("Question", on_delete=models.CASCADE)
     option = models.ForeignKey("Option", on_delete=models.CASCADE)
     sort = models.PositiveIntegerField(editable=False, db_index=True, default=0)
 
-    def natural_key(self):
-        return f"{self.question_id}.{self.option_id}"
-
-    class Meta:
+    class Meta(snapshot_models.SnapshotNaturalKeyModel.Meta):
         ordering = ["-sort"]
         unique_together = ("option", "question")
 
 
-class Option(core_models.SlugModel):
+class Option(snapshot_models.SnapshotModel):
     label = LocalizedField(blank=False, null=False, required=False)
     is_hidden = models.TextField(default="false")
     is_archived = models.BooleanField(default=False)
@@ -307,7 +308,7 @@ class Option(core_models.SlugModel):
         on_delete=models.SET_NULL,
     )
 
-    class Meta:
+    class Meta(snapshot_models.SnapshotModel.Meta):
         indexes = [GinIndex(fields=["meta"])]
 
 
@@ -349,7 +350,7 @@ class Document(core_models.UUIDModel):
         """
         Return a dictionary with the flattened answer map for this document.
 
-        The keys are the question IDs, and the values are either the answer value
+        The keys are the question slugs, and the values are either the answer value
         or date for non-table questions, or a list of flattened answer maps for
         table questions.
 
@@ -371,11 +372,11 @@ class Document(core_models.UUIDModel):
         answers = {}
         for answer in self.answers.all():
             if answer.question.type == Question.TYPE_TABLE:
-                answers[answer.question_id] = [
+                answers[answer.question.slug] = [
                     answer.flat_answer_map() for answer in answer.documents.all()
                 ]
             else:
-                answers[answer.question_id] = answer.value or answer.date
+                answers[answer.question.slug] = answer.value or answer.date
 
         return answers
 
@@ -737,6 +738,8 @@ class Answer(core_models.BaseModel):
 
         model, filters = map[self.question.type]
         queryset = model.objects.filter(**filters)
+        if model is Option:
+            queryset = queryset.filter(questions=self.question)
 
         def index_from_value(obj):
             return self.value.index(obj.slug)

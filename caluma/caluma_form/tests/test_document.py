@@ -312,7 +312,7 @@ def test_query_all_documents_filter_answers_by_question(
         }
     """
 
-    result = schema_executor(query, variable_values={"question": question.slug})
+    result = schema_executor(query, variable_values={"question": question.pk})
     assert not result.errors
     assert len(result.data["allDocuments"]["edges"]) == 1
     result_document = result.data["allDocuments"]["edges"][0]["node"]
@@ -353,7 +353,7 @@ def test_query_all_documents_filter_answers_by_questions(
     """
 
     result = schema_executor(
-        query, variable_values={"questions": [questions[0].slug, questions[1].slug]}
+        query, variable_values={"questions": [questions[0].pk, questions[1].pk]}
     )
     assert not result.errors
     assert len(result.data["allDocuments"]["edges"]) == 3
@@ -1850,7 +1850,7 @@ def test_efficient_init_of_calc_questions(
     # twice for calc value, once for hidden state of calc-1
     assert spy.call_count == 2
 
-    calc_ans = document.answers.get(question_id="calc-2")
+    calc_ans = document.answers.get(question=calc_2)
     assert calc_ans.value == 2
 
 

@@ -480,7 +480,7 @@ def test_answer_transform_in_tables(
 
     # Second row has an answer that triggers the transform and implies a validation error.
     # This will wrongfully succeed if the answer value comes from the wrong row
-    row2_doc.answers.create(question_id="column", value=5)
+    row2_doc.answers.create(question=questions["column"], value=5)
 
     validator = validators.DocumentValidator()
     # we expect this to fail, as in the second row, the 'column' answer is 5,
@@ -522,7 +522,7 @@ def test_answer_transform_hidden_table_cell(
     # answer the hidden column with the value that would make the dependant
     # question visible
     row = answers["table"].documents.first()
-    row.answers.create(question_id=col2_question.slug, value="yes")
+    row.answers.create(question=col2_question, value="yes")
 
     # validation should suceed since the check question should be hidden even
     # though the dependant column has the proper value but is hidden
@@ -563,7 +563,7 @@ def test_is_hidden_neighboring_table(
     # delete table answer documents
     answers["table"].documents.first().delete()
     assert not models.Document.objects.filter(form_id="row_form").exists()
-    assert not models.Answer.objects.filter(question_id="column").exists()
+    assert not models.Answer.objects.filter(question__slug="column").exists()
 
     form_q = questions["form"]
     table_q = questions["table"]
@@ -972,4 +972,6 @@ def test_calc_expression_default_value(
 
     answer_factory(document=document, question=dep, value=dep_value)
 
-    assert structure.FieldSet(document).get_field(calc.pk).calculate() == expected_value
+    assert (
+        structure.FieldSet(document).get_field(calc.slug).calculate() == expected_value
+    )

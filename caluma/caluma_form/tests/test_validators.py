@@ -841,7 +841,7 @@ def test_validate_options_without_jexl(
     spy = mocker.spy(structure.BaseField, "evaluate_jexl")
 
     with django_assert_num_queries(expect_queries):
-        api.save_answer(fq.question, document, value=options[3].option_id)
+        api.save_answer(fq.question, document, value=options[3].option.slug)
 
     assert spy.call_count == expect_jexl_evaluations
 

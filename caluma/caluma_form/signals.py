@@ -75,7 +75,10 @@ def save_calc_dependents(sender, instance, **kwargs):
     original = models.Question.objects.filter(pk=instance.pk).first()
     if not original:
         update_calc_dependents(
-            instance.slug, old_expr="false", new_expr=instance.calc_expression
+            instance.slug,
+            old_expr="false",
+            new_expr=instance.calc_expression,
+            snapshot_id=instance.snapshot_id,
         )
         instance.calc_expression_changed = True
 
@@ -84,6 +87,7 @@ def save_calc_dependents(sender, instance, **kwargs):
             instance.slug,
             old_expr=original.calc_expression,
             new_expr=instance.calc_expression,
+            snapshot_id=instance.snapshot_id,
         )
         instance.calc_expression_changed = True
     else:
@@ -94,7 +98,10 @@ def save_calc_dependents(sender, instance, **kwargs):
 @filter_events(lambda instance: instance.type == models.Question.TYPE_CALCULATED_FLOAT)
 def remove_calc_dependents(sender, instance, **kwargs):
     update_calc_dependents(
-        instance.slug, old_expr=instance.calc_expression, new_expr="false"
+        instance.slug,
+        old_expr=instance.calc_expression,
+        new_expr="false",
+        snapshot_id=instance.snapshot_id,
     )
 
 
@@ -154,7 +161,8 @@ def _recalculate_dependents(question):
     # We look at both the pre-calculated calc_dependents list AND we search
     # the calc_expression directly as a fallback.
     dependents = set(question.calc_dependents)
-    expression_deps = models.Question.objects.filter(
+    questions = models.Question.objects.for_snapshot(question.snapshot_id)
+    expression_deps = questions.filter(
         type=models.Question.TYPE_CALCULATED_FLOAT,
         calc_expression__icontains=f"'{question.slug}'",
     )
@@ -162,7 +170,7 @@ def _recalculate_dependents(question):
         dependents.add(q.slug)
 
     for q_calc_slug in dependents:
-        q_calc = models.Question.objects.get(slug=q_calc_slug)
+        q_calc = questions.get(slug=q_calc_slug)
         _recalculate_all_questions(q_calc)
 
 

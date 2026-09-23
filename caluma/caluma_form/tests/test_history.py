@@ -96,7 +96,7 @@ def test_document_as_of(
     input = {
         "document": str(document.pk),
         "value": "first admin - revision 1",
-        "question": q1.question.slug,
+        "question": q1.question_id,
     }
 
     result = admin_schema_executor(save_answer_query, variable_values={"input": input})
@@ -216,7 +216,7 @@ def test_historical_file_answer(
     input = {
         "document": str(document.pk),
         "value": [{"name": "my_file - rev 1"}],
-        "question": q1.question.slug,
+        "question": q1.question_id,
     }
 
     result = schema_executor(save_answer_query, variable_values={"input": input})

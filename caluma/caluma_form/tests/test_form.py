@@ -1,9 +1,14 @@
 import pytest
+from django.apps import apps
+from django.db import connection
 from django.utils import translation
 from graphql_relay import to_global_id
 
+from ...caluma_core.relay import extract_global_id
 from ...caluma_core.tests import extract_serializer_input_fields
-from .. import models
+from ...caluma_snapshot.migration_utils import suffix_initial_snapshot_ids
+from ...caluma_snapshot.models import Snapshot
+from .. import models, validators
 from ..api import copy_form
 from ..serializers import SaveFormSerializer
 
@@ -86,6 +91,92 @@ def test_optional_filter(db, form_factory, question, schema_executor):
     assert result.data["allForms"]["totalCount"] == 2
 
 
+@pytest.mark.parametrize(
+    "suffix_v1,expected_pks",
+    [
+        (False, ("test-form", "test-question", "test-form.test-question")),
+        pytest.param(
+            True,
+            ("test-form:1", "test-question:1", "test-form.test-question:1"),
+            marks=pytest.mark.snapshot_v1_suffix,
+        ),
+    ],
+)
+def test_snapshot_definition_primary_keys(
+    db, settings, form_question_factory, question_factory, suffix_v1, expected_pks
+):
+    assert settings.CALUMA_SNAPSHOT_V1_SUFFIX is suffix_v1
+
+    membership = form_question_factory(
+        id="ignored-membership",
+        form__id="ignored-form",
+        form__slug="test-form",
+        question__id="ignored-question",
+        question__slug="test-question",
+    )
+    assert (membership.form_id, membership.question_id, membership.pk) == expected_pks
+    assert membership.snapshot_id == 1
+
+    membership.form.slug = "changed-form"
+    with pytest.raises(ValueError, match="Snapshot identities"):
+        membership.form.save()
+    membership.form.refresh_from_db()
+
+    Snapshot.objects.create(pk=3)
+    other_form = models.Form.objects.create(slug="other-form", snapshot_id=3)
+    with pytest.raises(ValueError, match="same snapshot"):
+        models.Question.objects.create(
+            slug="cross-snapshot-question",
+            type=models.Question.TYPE_TABLE,
+            row_form=other_form,
+        )
+
+    Snapshot.objects.create(pk=2)
+    next_membership = form_question_factory(
+        form__slug="test-form",
+        form__snapshot_id=2,
+        question__slug="test-question",
+        question__snapshot_id=2,
+    )
+    assert (
+        next_membership.form_id,
+        next_membership.question_id,
+        next_membership.pk,
+    ) == ("test-form:2", "test-question:2", "test-form.test-question:2")
+    assert next_membership.snapshot_id == 2
+
+    question_factory(slug="v2-only", snapshot_id=2)
+    validators.QuestionValidator().validate(
+        {
+            "type": models.Question.TYPE_CALCULATED_FLOAT,
+            "calc_expression": "'v2-only'|answer",
+            "snapshot_id": 2,
+        }
+    )
+    with pytest.raises(KeyError, match="snapshot_id"):
+        validators.QuestionValidator().validate(
+            {
+                "type": models.Question.TYPE_CALCULATED_FLOAT,
+                "calc_expression": "'v2-only'|answer",
+            }
+        )
+
+    if not suffix_v1:
+        with connection.schema_editor() as editor:
+            suffix_initial_snapshot_ids(apps, editor)
+        assert models.FormQuestion.objects.get(pk=membership.pk).form_id == "test-form"
+
+        settings.CALUMA_SNAPSHOT_V1_SUFFIX = True
+        with connection.schema_editor() as editor:
+            suffix_initial_snapshot_ids(apps, editor)
+        migrated = models.FormQuestion.objects.get(pk="test-form.test-question:1")
+        assert (migrated.form_id, migrated.question_id) == (
+            "test-form:1",
+            "test-question:1",
+        )
+        assert models.FormQuestion.objects.get(pk=next_membership.pk).snapshot_id == 2
+
+
 @pytest.mark.parametrize("language_code", ("en", "de"))
 @pytest.mark.parametrize("form__description", ("some description text", ""))
 def test_save_form(db, snapshot, form, settings, schema_executor, language_code):
@@ -151,7 +242,7 @@ def test_copy_form(db, form, form_question_factory, schema_executor):
 
     form_slug = result.data["copyForm"]["form"]["slug"]
     assert form_slug == "new-form"
-    new_form = models.Form.objects.get(pk=form_slug)
+    new_form = models.Form.objects.get(slug=form_slug, snapshot_id=form.snapshot_id)
     assert new_form.name == "Test Form"
     assert new_form.meta == form.meta
     assert new_form.source == form
@@ -170,6 +261,7 @@ def test_copy_form_api(db, form, form_question_factory, schema_executor):
 
     new_form = copy_form(source=form, slug="new-form", name="Test Form")
 
+    assert new_form.slug == "new-form"
     assert new_form.pk == "new-form"
     assert new_form.name == "Test Form"
     assert new_form.meta == form.meta
@@ -268,7 +360,7 @@ def test_reorder_form_questions(db, form, form_question_factory, schema_executor
               questions {
                 edges {
                   node {
-                    slug
+                    id
                   }
                 }
               }
@@ -279,7 +371,7 @@ def test_reorder_form_questions(db, form, form_question_factory, schema_executor
     """
 
     question_ids = (
-        form.questions.order_by("slug").reverse().values_list("slug", flat=True)
+        form.questions.order_by("slug").reverse().values_list("pk", flat=True)
     )
     result = schema_executor(
         query,
@@ -296,7 +388,7 @@ def test_reorder_form_questions(db, form, form_question_factory, schema_executor
 
     assert not result.errors
     result_questions = [
-        question["node"]["slug"]
+        extract_global_id(question["node"]["id"])
         for question in result.data["reorderFormQuestions"]["form"]["questions"][
             "edges"
         ]
@@ -333,7 +425,7 @@ def test_reorder_form_questions_invalid_question(
             "input": {
                 "form": to_global_id(type(form).__name__, form.pk),
                 "questions": [
-                    to_global_id(type(models.Question).__name__, invalid_question.slug)
+                    to_global_id(models.Question.__name__, invalid_question.pk)
                 ],
             }
         },
@@ -367,7 +459,7 @@ def test_reorder_form_questions_duplicated_question(
         variable_values={
             "input": {
                 "form": to_global_id(type(form).__name__, form.pk),
-                "questions": [question.slug, question.slug],
+                "questions": [question.pk, question.pk],
             }
         },
     )

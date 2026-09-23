@@ -12,7 +12,7 @@ from ..caluma_core.filters import (
     DjangoFilterInterfaceConnectionField,
     InterfaceMetaFactory,
 )
-from ..caluma_core.mutation import Mutation, UserDefinedPrimaryKeyMixin
+from ..caluma_core.mutation import Mutation
 from ..caluma_core.relay import extract_global_id
 from ..caluma_core.types import (
     ConnectionField,
@@ -23,6 +23,8 @@ from ..caluma_core.types import (
 )
 from ..caluma_data_source.data_source_handlers import get_data_source_data
 from ..caluma_data_source.schema import DataSourceDataConnection
+from ..caluma_snapshot.mutations import SnapshotMutationMixin
+from ..caluma_snapshot.utils import visible_instance
 from . import filters, models, serializers, structure
 from .format_validators import get_format_validators
 from .validators import DocumentValidator, get_validity
@@ -132,6 +134,7 @@ class Question(Node, graphene.Interface):
     modified_by_user = graphene.String()
     modified_by_group = graphene.String()
     slug = graphene.String(required=True)
+    snapshot = graphene.Int(required=True, source="snapshot_id")
     label = graphene.String(required=True)
     info_text = graphene.String()
     is_required = QuestionJexl(
@@ -168,6 +171,7 @@ class Question(Node, graphene.Interface):
 
 
 class Option(FormDjangoObjectType):
+    snapshot = graphene.Int(required=True, source="snapshot_id")
     meta = generic.GenericScalar()
     is_hidden = QuestionJexl(required=True)
 
@@ -637,6 +641,7 @@ class ActionButtonQuestion(QuestionQuerysetMixin, FormDjangoObjectType):
 
 
 class Form(FormDjangoObjectType):
+    snapshot = graphene.Int(required=True, source="snapshot_id")
     questions = DjangoFilterInterfaceConnectionField(
         QuestionConnection,
         filterset_class=CollectionFilterSetFactory(
@@ -655,12 +660,12 @@ class Form(FormDjangoObjectType):
         connection_class = CountableConnectionBase
 
 
-class SaveForm(UserDefinedPrimaryKeyMixin, Mutation):
+class SaveForm(SnapshotMutationMixin, Mutation):
     class Meta:
         serializer_class = serializers.SaveFormSerializer
 
 
-class CopyForm(UserDefinedPrimaryKeyMixin, Mutation):
+class CopyForm(SnapshotMutationMixin, Mutation):
     class Meta:
         serializer_class = serializers.CopyFormSerializer
         model_operations = ["create"]
@@ -686,14 +691,14 @@ class ReorderFormQuestions(Mutation):
         serializer_class = serializers.ReorderFormQuestionsSerializer
 
 
-class CopyQuestion(UserDefinedPrimaryKeyMixin, Mutation):
+class CopyQuestion(SnapshotMutationMixin, Mutation):
     class Meta:
         serializer_class = serializers.CopyQuestionSerializer
         return_field_type = Question
         model_operations = ["create"]
 
 
-class SaveQuestion(UserDefinedPrimaryKeyMixin, Mutation):
+class SaveQuestion(SnapshotMutationMixin, Mutation):
     """
     Base class of all save question mutations.
 
@@ -797,12 +802,12 @@ class SaveActionButtonQuestion(SaveQuestion):
         return_field_type = Question
 
 
-class SaveOption(UserDefinedPrimaryKeyMixin, Mutation):
+class SaveOption(SnapshotMutationMixin, Mutation):
     class Meta:
         serializer_class = serializers.SaveOptionSerializer
 
 
-class CopyOption(UserDefinedPrimaryKeyMixin, Mutation):
+class CopyOption(SnapshotMutationMixin, Mutation):
     class Meta:
         serializer_class = serializers.CopyOptionSerializer
         model_operations = ["create"]
@@ -991,11 +996,15 @@ class CopyDocument(Mutation):
 class SaveDocumentAnswer(Mutation):
     @classmethod
     def get_object(cls, root, info, queryset, **input):
-        question_id = extract_global_id(input["question"])
         document_id = extract_global_id(input["document"])
-        instance = models.Answer.objects.filter(
-            question=question_id, document=document_id
-        ).first()
+        document = get_object_or_404(
+            Document.get_queryset(models.Document.objects.all(), info), pk=document_id
+        )
+        question = get_object_or_404(
+            Question.get_queryset(models.Question.objects.all(), info),
+            pk=extract_global_id(input["question"]),
+        )
+        instance = visible_instance(queryset, question=question, document=document)
         return instance
 
     class Meta:
@@ -1055,8 +1064,15 @@ class SaveDocumentFilesAnswer(SaveDocumentAnswer):
 class SaveDefaultAnswer(Mutation):
     @classmethod
     def get_object(cls, root, info, queryset, **input):
-        question_id = extract_global_id(input["question"])
-        instance = models.Question.objects.get(pk=question_id).default_answer
+        question = get_object_or_404(
+            Question.get_queryset(models.Question.objects.all(), info),
+            pk=extract_global_id(input["question"]),
+        )
+        instance = (
+            visible_instance(queryset, pk=question.default_answer_id)
+            if question.default_answer_id
+            else None
+        )
         return instance
 
     class Meta:

@@ -15,6 +15,8 @@ from rest_framework.serializers import (
 from caluma.caluma_form.exceptions import CustomFormatValidationError
 
 from ..caluma_core import serializers
+from ..caluma_snapshot.serializers import SnapshotModelSerializer
+from ..caluma_snapshot.utils import rebind_definition
 from . import api, domain_logic, models, validators
 from .jexl import QuestionJexl
 
@@ -34,13 +36,21 @@ class ButtonColorField(serializers.CalumaChoiceField):
         super().__init__(models.Question.COLOR_CHOICES, **kwargs)
 
 
-class SaveFormSerializer(serializers.ModelSerializer):
+class SaveFormSerializer(SnapshotModelSerializer):
     class Meta:
         model = models.Form
-        fields = ["slug", "name", "description", "meta", "is_archived", "is_published"]
+        fields = [
+            "slug",
+            "snapshot",
+            "name",
+            "description",
+            "meta",
+            "is_archived",
+            "is_published",
+        ]
 
 
-class CopyFormSerializer(serializers.ModelSerializer):
+class CopyFormSerializer(SnapshotModelSerializer):
     source = serializers.GlobalIDPrimaryKeyRelatedField(
         queryset=models.Form.objects, required=True
     )
@@ -53,14 +63,21 @@ class CopyFormSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Form
-        fields = ["slug", "name", "description", "source", "is_published"]
+        fields = ["slug", "snapshot", "name", "description", "source", "is_published"]
 
 
 class AddFormQuestionSerializer(serializers.ModelSerializer):
-    form = serializers.GlobalIDField(source="slug")
+    form = serializers.GlobalIDField(source="id")
     question = serializers.GlobalIDPrimaryKeyRelatedField(
         queryset=models.Question.objects
     )
+
+    def validate_question(self, question):
+        if question.snapshot_id != self.instance.snapshot_id:
+            raise exceptions.ValidationError(
+                "Related definitions must belong to the same snapshot."
+            )
+        return question
 
     def update(self, instance, validated_data):
         # default sort is 0, as per default form question are sorted
@@ -92,7 +109,7 @@ class AddFormQuestionSerializer(serializers.ModelSerializer):
 
 
 class RemoveFormQuestionSerializer(serializers.ModelSerializer):
-    form = serializers.GlobalIDField(source="slug")
+    form = serializers.GlobalIDField(source="id")
     question = serializers.GlobalIDPrimaryKeyRelatedField(
         queryset=models.Question.objects
     )
@@ -115,7 +132,7 @@ class FormQuestionRelatedField(serializers.GlobalIDPrimaryKeyRelatedField):
 
 
 class ReorderFormQuestionsSerializer(serializers.ModelSerializer):
-    form = serializers.GlobalIDField(source="slug")
+    form = serializers.GlobalIDField(source="id")
     questions = FormQuestionRelatedField(many=True)
 
     def update(self, instance, validated_data):
@@ -141,7 +158,7 @@ class ReorderFormQuestionsSerializer(serializers.ModelSerializer):
         model = models.Form
 
 
-class CopyQuestionSerializer(serializers.ModelSerializer):
+class CopyQuestionSerializer(SnapshotModelSerializer):
     source = serializers.GlobalIDPrimaryKeyRelatedField(
         queryset=models.Question.objects, required=True
     )
@@ -155,7 +172,9 @@ class CopyQuestionSerializer(serializers.ModelSerializer):
         validated_data["is_hidden"] = source.is_hidden
         validated_data["configuration"] = dict(source.configuration)
         validated_data["meta"] = dict(source.meta)
-        validated_data["row_form"] = source.row_form
+        snapshot = validated_data["snapshot_id"]
+        validated_data["row_form"] = rebind_definition(source.row_form, snapshot)
+        validated_data["sub_form"] = rebind_definition(source.sub_form, snapshot)
 
         question = super().create(validated_data)
 
@@ -163,7 +182,7 @@ class CopyQuestionSerializer(serializers.ModelSerializer):
             models.QuestionOption(
                 sort=sort,
                 question=question,
-                option=question_option.option,
+                option=rebind_definition(question_option.option, snapshot),
                 created_by_user=user.username,
                 created_by_group=user.group,
                 modified_by_user=user.username,
@@ -180,21 +199,23 @@ class CopyQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Question
-        fields = ["slug", "label", "source"]
+        fields = ["slug", "snapshot", "label", "source"]
 
 
-class SaveQuestionSerializer(serializers.ModelSerializer):
+class SaveQuestionSerializer(SnapshotModelSerializer):
     is_hidden = QuestionJexlField(required=False)
     is_required = QuestionJexlField(required=False)
 
     def validate(self, data):
+        data = super().validate(data)
         validators.QuestionValidator().validate(data)
-        return super().validate(data)
+        return data
 
     class Meta:
         model = models.Question
         fields = [
             "slug",
+            "snapshot",
             "label",
             "info_text",
             "is_required",
@@ -484,6 +505,7 @@ class SaveStaticQuestionSerializer(SaveQuestionSerializer):
         fields = [
             "label",
             "slug",
+            "snapshot",
             "info_text",
             "is_hidden",
             "meta",
@@ -520,6 +542,7 @@ class SaveActionButtonQuestionSerializer(SaveQuestionSerializer):
         fields = [
             "label",
             "slug",
+            "snapshot",
             "info_text",
             "is_hidden",
             "meta",
@@ -531,15 +554,15 @@ class SaveActionButtonQuestionSerializer(SaveQuestionSerializer):
         ]
 
 
-class SaveOptionSerializer(serializers.ModelSerializer):
+class SaveOptionSerializer(SnapshotModelSerializer):
     is_hidden = QuestionJexlField(required=False)
 
     class Meta:
-        fields = ["slug", "label", "is_archived", "is_hidden", "meta"]
+        fields = ["slug", "snapshot", "label", "is_archived", "is_hidden", "meta"]
         model = models.Option
 
 
-class CopyOptionSerializer(serializers.ModelSerializer):
+class CopyOptionSerializer(SnapshotModelSerializer):
     source = serializers.GlobalIDPrimaryKeyRelatedField(
         queryset=models.Option.objects, required=True
     )
@@ -550,7 +573,7 @@ class CopyOptionSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
     class Meta:
-        fields = ["slug", "label", "source"]
+        fields = ["slug", "snapshot", "label", "source"]
         model = models.Option
 
 
@@ -767,7 +790,9 @@ class SaveDefaultTableAnswerSerializer(SaveDefaultAnswerSerializer):
 
 
 class RemoveDefaultAnswerSerializer(serializers.ModelSerializer):
-    question = PrimaryKeyRelatedField(queryset=models.Question.objects)
+    question = serializers.GlobalIDPrimaryKeyRelatedField(
+        queryset=models.Question.objects
+    )
 
     @transaction.atomic
     def update(self, instance, validated_data):

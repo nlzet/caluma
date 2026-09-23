@@ -41,6 +41,16 @@ def test_migrate_rename_form_slugs(post_migrate_to_current_state):
     )
     table.fields.create(data_source="form_id", alias="the_form")
 
+    # The analytics runner uses current form models. Upgrade their schema while
+    # retaining the old analytics field, including the legacy form primary key.
+    executor.loader.build_graph()
+    executor.migrate(
+        [
+            ("caluma_analytics", "0005_analytics_field_ordering"),
+            *executor.loader.graph.leaf_nodes("caluma_form"),
+        ]
+    )
+
     runner = simple_table.SimpleTable(table)
 
     with pytest.raises(KeyError) as exc_info:

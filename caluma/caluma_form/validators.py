@@ -9,6 +9,7 @@ from rest_framework import exceptions
 from caluma.caluma_core.exceptions import ConfigurationError
 from caluma.caluma_data_source.data_source_handlers import get_data_sources
 from caluma.caluma_form import structure
+from caluma.caluma_snapshot.utils import validate_answer_snapshot
 from caluma.caluma_workflow.models import Case, WorkItem
 
 from . import jexl, models
@@ -100,7 +101,7 @@ class AnswerValidator:
 
             # If valdiation context is passed in from the DocumentValidator, we
             # already have the *field* we need, and no further work is needed.
-            if validation_context.slug() != question.slug:  # pragma: no cover
+            if validation_context.question.pk != question.pk:  # pragma: no cover
                 # This only happens if *programmer* made an error, therefore we're
                 # not explicitly covering it
                 raise ConfigurationError(
@@ -114,7 +115,7 @@ class AnswerValidator:
         root_context = DocumentValidator().get_validation_context(document.family)
 
         return root_context.find_field_by_document_and_question(
-            document, question.slug
+            document, question
         ), root_context
 
     def _evaluate_options_jexl(
@@ -303,6 +304,13 @@ class AnswerValidator:
         data_source_context=None,
         **kwargs,
     ):
+        if document:
+            form = (
+                validation_context._fastloader.form_by_id(document.form_id)
+                if validation_context
+                else document.form
+            )
+            validate_answer_snapshot(question, form)
         # Get value from kwargs depending on the question type
         if question.type == Question.TYPE_DATE:
             value = kwargs["date"]
@@ -394,7 +402,7 @@ class DocumentValidator:
                 # already have raised an exception
                 validator = AnswerValidator()
                 validator.validate(
-                    document=field.answer.document,
+                    document=field._fastloader.document_by_id(field.answer.document_id),
                     question=field.question,
                     value=field.answer.value,
                     date=field.answer.date,
@@ -425,12 +433,12 @@ class DocumentValidator:
         )
 
         case_form = (
-            relevant_case.document.form_id
+            relevant_case.document.form.slug
             if relevant_case and relevant_case.document
             else None
         )
         case_family_form = (
-            relevant_case.family.document.form_id
+            relevant_case.family.document.form.slug
             if relevant_case and relevant_case.family.document
             else None
         )
@@ -479,7 +487,7 @@ class DocumentValidator:
 
         This evaluates the `is_hidden` expression for each question to decide
         if the question is visible.
-        Return a list of question slugs that are visible.
+        Return a list of question instances that are visible.
 
         Note: If you pass in a validation context, it's the caller's
         responsibility to ensure it's the right one
@@ -530,7 +538,9 @@ class QuestionValidator:
         deps = set(question_jexl.extract_referenced_questions(expr))
 
         inexistent_slugs = deps - set(
-            models.Question.objects.filter(pk__in=deps).values_list("slug", flat=True)
+            models.Question.objects.for_snapshot(data["snapshot_id"])
+            .filter(slug__in=deps)
+            .values_list("slug", flat=True)
         )
         illegal_deps = ", ".join(inexistent_slugs)
 

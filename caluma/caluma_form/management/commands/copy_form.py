@@ -16,6 +16,12 @@ class Command(BaseCommand):
             help="The slug of the form to copy.",
         )
         parser.add_argument(
+            "--snapshot",
+            type=int,
+            default=1,
+            help="Snapshot containing the source form (default: 1).",
+        )
+        parser.add_argument(
             "--slug",
             "-s",
             dest="slug",
@@ -53,7 +59,7 @@ class Command(BaseCommand):
         new_slug = options["slug"]
 
         try:
-            source = Form.objects.get(pk=source_slug)
+            source = Form.objects.get(slug=source_slug, snapshot_id=options["snapshot"])
         except Form.DoesNotExist:
             raise CommandError(f"Form '{source_slug}' not found - can't copy")
 

@@ -73,6 +73,7 @@ syrupy = "5.5.3"
 
 [tool.pytest.ini_options]
 addopts = "-n auto --reuse-db --randomly-seed=1521188766 --randomly-dont-reorganize"
+markers = ["snapshot_v1_suffix: use snapshot-suffixed primary keys for snapshot 1"]
 DJANGO_SETTINGS_MODULE = "caluma.settings.django"
 env = [
     "META_FIELDS=test-key,foobar",

@@ -203,11 +203,11 @@ def test_extract_choice_labels(
     example_analytics.fields.all().delete()
     lang_suffix = f".{use_lang}" if use_lang else ""
     example_analytics.fields.create(
-        data_source=f"document[top_form].{choice_q.slug}",
+        data_source=f"document[top_form].{choice_q.pk}",
         alias="choice_value",
     )
     example_analytics.fields.create(
-        data_source=f"document[top_form].{choice_q.slug}.label{lang_suffix}",
+        data_source=f"document[top_form].{choice_q.pk}.label{lang_suffix}",
         alias="choice_label",
     )
 

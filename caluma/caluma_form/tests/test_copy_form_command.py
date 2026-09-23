@@ -3,6 +3,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from caluma.caluma_form.models import Form
+from caluma.caluma_snapshot.models import Snapshot
 
 
 @pytest.mark.parametrize(
@@ -37,13 +38,21 @@ from caluma.caluma_form.models import Form
         ),
     ],
 )
+@pytest.mark.snapshot_v1_suffix
 def test_copy_form_command(db, form, params, expected_form):
-    call_command("copy_form", form.pk, **params)
+    call_command("copy_form", form.slug, **params)
 
-    new_form = Form.objects.get(pk=params["slug"])
+    new_form = Form.objects.get(slug=params["slug"], snapshot_id=form.snapshot_id)
 
     for key, value in expected_form.items():
         assert getattr(new_form, key) == value
+
+    Snapshot.objects.create(pk=2)
+    Form.objects.create(slug=form.slug, snapshot_id=2)
+    call_command("copy_form", form.slug, snapshot=2, slug="snapshot-2-copy")
+    assert (
+        Form.objects.get(slug="snapshot-2-copy", snapshot_id=2).source_id == "form-v1:2"
+    )
 
 
 def test_copy_form_command_error(db):

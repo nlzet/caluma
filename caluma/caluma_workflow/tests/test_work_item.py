@@ -1931,7 +1931,7 @@ def test_complete_multiple_instance_continue_async(
     )
 
 
-@pytest.mark.parametrize("value,len_results", [("foo", 1), ("bar", 0)])
+@pytest.mark.parametrize("matching_form,len_results", [(True, 1), (False, 0)])
 def test_query_all_work_items_filter_case_document_forms(
     db,
     work_item_factory,
@@ -1939,7 +1939,7 @@ def test_query_all_work_items_filter_case_document_forms(
     form_factory,
     document_factory,
     schema_executor,
-    value,
+    matching_form,
     len_results,
 ):
     form = form_factory(slug="foo")
@@ -1948,7 +1948,7 @@ def test_query_all_work_items_filter_case_document_forms(
     work_item_factory(case=case)
 
     query = """
-        query WorkItems($case_document_forms: [String]) {
+        query WorkItems($case_document_forms: [ID]) {
           allWorkItems(filter: [{caseDocumentForms: $case_document_forms}]) {
             totalCount
             edges {
@@ -1966,7 +1966,8 @@ def test_query_all_work_items_filter_case_document_forms(
         }
     """
 
-    result = schema_executor(query, variable_values={"case_document_forms": [value]})
+    form_id = form.pk if matching_form else "missing-form"
+    result = schema_executor(query, variable_values={"case_document_forms": [form_id]})
 
     assert not result.errors
     assert len(result.data["allWorkItems"]["edges"]) == len_results

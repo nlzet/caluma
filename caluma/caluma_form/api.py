@@ -121,12 +121,14 @@ def copy_form(
     description: Optional[str] = None,
     is_published: Optional[bool] = None,
     user: Optional[BaseUser] = None,
+    snapshot_id: Optional[int] = None,
 ) -> models.Form:
     """Copy a form."""
 
     return domain_logic.CopyFormLogic.copy(
         {
             "source": source,
+            "snapshot_id": source.snapshot_id if snapshot_id is None else snapshot_id,
             "slug": slug,
             "name": name,
             "description": description,

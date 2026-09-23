@@ -45,23 +45,23 @@ def test_inversible_with_vars(db, schema_executor, document_factory, question):
         return result_ids(result)
 
     # ordering by answer value, forward.
-    ordered = get_ordered([{"answerValue": question.slug}])
+    ordered = get_ordered([{"answerValue": question.pk}])
     assert ordered == [doc_c_id, doc_b_id, doc_a_id]
 
     # ordering by answer value, backward.
-    ordered = get_ordered([{"answerValue": question.slug, "direction": "DESC"}])
+    ordered = get_ordered([{"answerValue": question.pk, "direction": "DESC"}])
     assert ordered == [doc_a_id, doc_b_id, doc_c_id]
 
     # order by meta key "blah" first, which contains the same value twice,
     # then by the answer value, which orders the ambiguity between
     # the first two same-value documents
     ordered = get_ordered(
-        [{"meta": "blah"}, {"answerValue": question.slug, "direction": "DESC"}]
+        [{"meta": "blah"}, {"answerValue": question.pk, "direction": "DESC"}]
     )
     assert ordered == [doc_c_id, doc_a_id, doc_b_id]
 
     # same, but secondary order goes backwards
-    ordered = get_ordered([{"meta": "blah"}, {"answerValue": question.slug}])
+    ordered = get_ordered([{"meta": "blah"}, {"answerValue": question.pk}])
     assert ordered == [doc_c_id, doc_b_id, doc_a_id]
 
     # Just for coverage - sort by attribute
@@ -69,7 +69,7 @@ def test_inversible_with_vars(db, schema_executor, document_factory, question):
 
     assert ordered == [
         str(doc.id)
-        for doc in sorted([doc_c, doc_b, doc_a], key=lambda doc: doc.form.slug)
+        for doc in sorted([doc_c, doc_b, doc_a], key=lambda doc: doc.form_id)
     ]
 
 
@@ -97,7 +97,7 @@ def test_order_by_case_document_answer(
           }
         }
     """ % (
-        question.slug,
+        question.pk,
         direction,
     )
 

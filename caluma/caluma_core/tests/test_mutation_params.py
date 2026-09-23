@@ -28,7 +28,7 @@ def test_get_mutation_params_inline(
             return True
         assert len(params) == 1
         assert len(params["input"]) == 2
-        assert params["input"]["form"] == form.slug
+        assert params["input"]["form"] == form.pk
         meta = json.loads(params["input"]["meta"])
         return meta["allow"]
 
@@ -52,7 +52,7 @@ def test_get_mutation_params_inline(
               }
             }
         }
-    """ % {"form": form.slug}
+    """ % {"form": form.pk}
 
     result = schema_executor(query)
     assert result.data == {
@@ -61,7 +61,7 @@ def test_get_mutation_params_inline(
         "save3": {
             "question": {
                 "id": to_global_id(
-                    "TextQuestion", form_models.Question.objects.get().slug
+                    "TextQuestion", form_models.Question.objects.get().pk
                 )
             }
         },
@@ -108,7 +108,7 @@ def test_get_mutation_params_with_vars(db, schema_executor, permission_classes, 
         "saveTextQuestion": {
             "question": {
                 "id": to_global_id(
-                    "TextQuestion", form_models.Question.objects.get().slug
+                    "TextQuestion", form_models.Question.objects.get().pk
                 )
             }
         }
